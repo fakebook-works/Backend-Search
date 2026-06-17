@@ -48,7 +48,7 @@ CREATE TABLE inverted_index (
 
 -- Create Index to maximize search speed
 CREATE INDEX idx_term_search ON inverted_index(term);
-
+```
 
 ### Schema Explanation
 
