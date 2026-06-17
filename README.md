@@ -1,15 +1,50 @@
-# Backend-Search
-# 🔍 Fakebook Search Infrastructure & Schema
+# Fakebook Search Infrastructure: Database Schema & Architecture
 
-## 🏗️ 1. Bốn Trụ Cột Cốt Lõi Của Hệ Thống
+This repository contains the core architecture and database schema for the Fakebook Search Engine. 
 
-Hệ thống tìm kiếm được xây dựng dựa trên 4 nguyên lý cốt lõi sau:
+## 1. Four Core Pillars of the Search System
 
-*   **Tìm kiếm trên Đồ thị Xã hội (Social Graph):** Khác với Google tìm kiếm các tài liệu web tĩnh, hệ thống này tìm kiếm trên một mạng lưới khổng lồ gồm các Đỉnh (người dùng, trang, bài viết) và các Cạnh (bạn bè, lượt thích, bình luận).
-*   **Cỗ máy lập chỉ mục "Unicorn" (Inverted Index):** Do khối lượng dữ liệu quá lớn, hệ thống sử dụng kiến trúc Unicorn để index các chuỗi mối quan hệ (ví dụ: `friend:4`) thay vì từ khóa văn bản thuần túy. Để tăng tốc độ, hệ thống dùng một khóa sắp xếp (`sort-key`) đánh giá điểm tĩnh từ trước và chỉ cắt lấy top kết quả quan trọng nhất.
-*   **Cập nhật thời gian thực với "Wormhole":** Công nghệ luồng phân phối này liên tục "lắng nghe" dữ liệu từ MySQL và đẩy thẳng bài viết mới vào bộ máy Index chỉ trong vài giây.
-*   **Kết hợp AI và Bảo vệ Quyền riêng tư (ACL):**
-    *   *Truy xuất ngữ nghĩa (SSR):* Chạy song song với Unicorn, mô hình SSR biến chữ viết thành các vector không gian siêu chiều (ví dụ: tìm "thức uống cà phê Ý" vẫn ra "cappuccino").
-    *   *Kiểm soát truy cập (ACL):* Mọi truy vấn phải đi qua hàng rào bảo mật; nếu bài viết được cài đặt "Chỉ mình tôi", hệ thống sẽ tự động gạt bỏ kết quả đó ngay lập tức đối với người tìm kiếm không hợp lệ.
+Our search system operates on four foundational pillars inspired by Facebook's architecture:
 
----
+* **Social Graph Search:** Unlike Google, which searches static web documents linked by hyperlinks, this system searches across a massive Social Graph. The network consists of Nodes (users, pages, posts) and Edges representing interactions (friends, likes, comments).
+* **"Unicorn" Indexing Engine (Inverted Index):** Traditional graph databases cannot handle the massive data volume, so we utilize a Unicorn-inspired system. Instead of pure text indexing, it indexes relationship chains (e.g., searching for friends of user ID 4 uses the term `friend:4`) to extract a list of matching IDs. To achieve ultra-fast speeds, it does not scan millions of results but uses a `sort-key` to pre-evaluate static scores, extracting only the top most important results to the top.
+* **Real-time Updates with "Wormhole":** A new post becomes searchable in seconds thanks to Wormhole technology. This distribution pipeline continuously listens to raw data from the MySQL database, packages new posts, and pushes them directly into the Index engine in just a few seconds.
+* **AI and Privacy Protection:** 
+    * *Semantic Retrieval (AI):* The Unicorn engine runs parallel to a machine learning model called SSR. SSR converts text into multi-dimensional mathematical vectors, allowing the system to understand queries like "Italian coffee drink" and return posts containing the word "cappuccino". 
+    * *Privacy (ACL):* Every query must pass through an Access Control List (ACL). If a post matches keywords but the owner set it to "Only me," the system automatically discards that result instantly.
+
+## 2. SQL Search Schema Database (BETA 1)
+
+Below is the foundational SQL schema designed to support this architecture:
+
+```sql
+-- Create Schema for the Search feature
+CREATE SCHEMA IF NOT EXISTS fb_search;
+SET search_path TO fb_search;
+
+-- TABLE 1: SEARCH ENTITY (Represents the results to be displayed)
+CREATE TABLE search_entity (
+    entity_id       BIGINT PRIMARY KEY, -- ID of the result (user, post, or page ID)
+    entity_type     VARCHAR(50) NOT NULL, -- Type of result: 'USER', 'POST', 'GROUP'
+    
+    -- STATIC RANK: Display priority score 
+    sort_key        INT DEFAULT 0, -- Celebrities or highly-liked posts get higher scores
+    
+    -- PRIVACY (ACL) 
+    privacy_level   INT DEFAULT 2, -- 0: Only me, 1: Friends, 2: Public
+    owner_id        BIGINT NOT NULL, -- Owner of the entity (for permissions check)
+    
+    created_at      TIMESTAMPTZ DEFAULT now()
+);
+
+-- TABLE 2: KEYWORD INDEX (Inverted Index - The heart of the Unicorn system)
+CREATE TABLE inverted_index (
+    term            VARCHAR(255) NOT NULL, -- Keyword (e.g., 'name:nguyen', 'lives_in:hanoi', 'friend:4')
+    entity_id       BIGINT REFERENCES search_entity(entity_id) ON DELETE CASCADE,
+    
+    -- Composite primary key to prevent duplication
+    PRIMARY KEY (term, entity_id)
+);
+
+-- Create Index to maximize search speed
+CREATE INDEX idx_term_search ON inverted_index(term);
