@@ -48,3 +48,42 @@ CREATE TABLE inverted_index (
 
 -- Create Index to maximize search speed
 CREATE INDEX idx_term_search ON inverted_index(term);
+
+
+### Schema Explanation
+
+*   **`search_entity` Table (The Result Framework):** This table contains the list of "things" that can be found. The crucial element here is the `sort_key` column[cite: 4]. When searching for "Nguyen", there might be 1 million people; the system looks at the `sort_key` and fetches those with high scores (e.g., verified accounts, 5000 friends) to display first. The `privacy_level` acts as a security barrier; results with `privacy_level = 0` (Only me) are instantly discarded if the searcher is not the `owner_id` (The ACL problem)[cite: 4].
+*   **`inverted_index` Table (The Index):** This is how the "Relationship Network" is turned into "Keywords". Instead of saving full sentences, when User "Nguyen Van A" (ID = 10, lives in Hanoi, friend of User 4) is created, the backend system separates the data and saves it as multiple terms: `name:nguyen`, `name:van`, `name:a`, `lives_in:hanoi`, and `friend:4`.
+
+### 3. How the Search Magic Works (Practical Example)
+
+Imagine our "Fakebook" network currently has 3 users[cite: 4]:
+*   **User ID = 1:** Nguyen Van A (Lives in Hanoi, friend of User 2).
+*   **User ID = 2:** Tran Thi B (Lives in Hanoi, friend of User 1).
+*   **User ID = 3:** Nguyen Van C (Lives in Da Nang, highly popular verified account).
+
+#### Data Storage Simulation
+
+**`search_entity` Table:**
+*   ID 1 | USER | sort_key: 10 | Public | Owner: 1 (Nguyen Van A, low popularity).
+*   ID 2 | USER | sort_key: 15 | Public | Owner: 2 (Tran Thi B).
+*   ID 3 | USER | sort_key: 999 | Public | Owner: 3 (Nguyen Van C, verified account so sort_key is very high).
+
+**`inverted_index` Table:**
+*   `name:nguyen` -> ID 1, ID 3.
+*   `lives_in:hanoi` -> ID 1, ID 2.
+*   `friend:2` -> ID 1.
+
+#### Query Execution
+
+Now, a user types into the search bar: *"Find people named Nguyen living in Hanoi"*``.
+
+If using a traditional Database (using `LIKE`), the server would have to scan the User table from the first row to the last to see who is named "Nguyen" AND who is in "Hanoi", causing massive fatigue for a million users.
+
+However, with the Unicorn design, the database performs this magic extremely fast via `and` operators for set intersection:
+
+*   **Step 1:** Find IDs with `term = name:nguyen`. The Database instantly fetches: `[ID 1, ID 3]`.
+*   **Step 2:** Find IDs with `term = lives_in:hanoi`. The Database instantly fetches: `[ID 1, ID 2]`.
+*   **Step 3 (Set Intersection):** The common ID appearing in both lists is ID 1 (Nguyen Van A).
+
+**Conclusion:** The system returns User ID 1[cite: 4]. This process happens in just a few milliseconds because the Database retrieves data directly using the Primary Key, completely avoiding a full-scan!
