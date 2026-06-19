@@ -1,23 +1,19 @@
 ﻿-- 1. BẢNG OBJECTS (Lưu thực thể & Phân quyền)
 CREATE TABLE objects (
-    id              BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, -- ID tự động tăng
-    entity_type     VARCHAR(50) NOT NULL,    -- Phân loại: 'USER', 'POST', 'GROUP'
+    id       BIGIN PRIMARY KEY, -- ID tự động tăng
+    type     VARCHAR(50) NOT NULL,    -- Phân loại: 'USER', 'POST', 'GROUP'
     
     -- Dữ liệu hiển thị
-    content         TEXT NOT NULL,           -- Nội dung (Tên người/Tên nhóm/Nội dung bài)
     sort_key        INT DEFAULT 0,           -- Điểm nổi tiếng để xếp hạng ưu tiên
     
     -- Hàng rào bảo mật (Quan trọng)
     owner_id        BIGINT NOT NULL,         -- ID của User tạo ra Object này
     privacy_level   INT DEFAULT 2,           -- 0: Private, 1: Friends, 2: Public
-    
-    -- Thời gian
-    created_at      TIMESTAMPTZ DEFAULT now()
 );
 
 -- 2. BẢNG TOKENS (Kho từ khóa tự động)
 CREATE TABLE tokens (
-    id              BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, -- ID tự động tăng
+    id              BIGINT PRIMARY KEY, -- ID 
     token_text      VARCHAR(255) UNIQUE NOT NULL -- Đảm bảo không bao giờ trùng chữ
 );
 
