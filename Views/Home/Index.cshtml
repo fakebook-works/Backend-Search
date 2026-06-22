@@ -1,0 +1,46 @@
+﻿@* Khai báo kiểu dữ liệu mà Controller sẽ gửi sang (Khay chứa danh sách Object) *@
+@model IEnumerable<Backend_Search_Fakebook.Models.Object>
+
+<div class="text-center mb-4">
+    <h1 class="display-4">Fakebook Search Engine</h1>
+
+    @* Form gửi dữ liệu tìm kiếm về hàm Index *@
+    <form method="get" action="/Home/Index" class="w-50 mx-auto mt-3">
+        <div class="input-group">
+            @* Thuộc tính name="tuKhoa" PHẢI TRÙNG TÊN với tham số trong Controller *@
+            <input type="text" name="tuKhoa" value="@ViewBag.TuKhoaDaNhap" class="form-control" placeholder="Tìm kiếm trên Fakebook..." />
+            <button class="btn btn-primary" type="submit">Tìm kiếm</button>
+        </div>
+    </form>
+</div>
+
+<table class="table table-bordered mt-4">
+    <thead class="thead-dark">
+        <tr>
+            <th>ID Thực Thể</th>
+            <th>Phân Loại</th>
+            <th>Điểm Nổi Tiếng (Sort Key)</th>
+            <th>Từ khóa gắn kèm</th>
+        </tr>
+    </thead>
+    <tbody>
+        @* Vòng lặp in từng dòng dữ liệu ra bảng *@
+        @foreach (var item in Model)
+        {
+            <tr>
+                <td>@item.Id</td>
+                <td>
+                    <span class="badge bg-primary">@item.Type</span>
+                </td>
+                <td>@item.SortKey</td>
+                <td>
+                    @* In danh sách từ khóa của Object này *@
+                    @foreach (var token in item.Tokens)
+                    {
+                        <span class="badge bg-secondary">@token.TokenText</span>
+                    }
+                </td>
+            </tr>
+        }
+    </tbody>
+</table>
