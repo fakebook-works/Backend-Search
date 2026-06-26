@@ -1,89 +1,245 @@
 # Fakebook Search Infrastructure: Database Schema & Architecture
 
-This repository contains the core architecture and database schema for the Fakebook Search Engine. 
+This repository contains the core database schema and architecture of the Fakebook Search Engine. The design is inspired by Facebook's search infrastructure and focuses on fast, scalable, and privacy-aware searching.
+
+---
 
 ## 1. Four Core Pillars of the Search System
 
-Our search system operates on four foundational pillars inspired by Facebook's architecture:
+Our search engine is built around four fundamental components inspired by Facebook's architecture.
 
-* **Social Graph Search:** Unlike Google, which searches static web documents linked by hyperlinks, this system searches across a massive Social Graph. The network consists of Nodes (users, pages, posts) and Edges representing interactions (friends, likes, comments).
-* **"Unicorn" Indexing Engine (Inverted Index):** Traditional graph databases cannot handle the massive data volume, so we utilize a Unicorn-inspired system. Instead of pure text indexing, it indexes relationship chains (e.g., searching for friends of user ID 4 uses the term `friend:4`) to extract a list of matching IDs. To achieve ultra-fast speeds, it does not scan millions of results but uses a `sort-key` to pre-evaluate static scores, extracting only the top most important results to the top.
-* **Real-time Updates with "Wormhole":** A new post becomes searchable in seconds thanks to Wormhole technology. This distribution pipeline continuously listens to raw data from the MySQL database, packages new posts, and pushes them directly into the Index engine in just a few seconds.
-* **AI and Privacy Protection:** 
-    * *Semantic Retrieval (AI):* The Unicorn engine runs parallel to a machine learning model called SSR. SSR converts text into multi-dimensional mathematical vectors, allowing the system to understand queries like "Italian coffee drink" and return posts containing the word "cappuccino". 
-    * *Privacy (ACL):* Every query must pass through an Access Control List (ACL). If a post matches keywords but the owner set it to "Only me," the system automatically discards that result instantly.
+### 1. Social Graph
 
-## 2. SQL Search Schema Database (BETA 1)
+Unlike traditional search engines that index web pages, Fakebook searches through a **social graph**.
 
-Below is the foundational SQL schema designed to support this architecture:
+The social graph consists of:
 
-```sql
--- Create Schema for the Search feature
-CREATE SCHEMA IF NOT EXISTS fb_search;
-SET search_path TO fb_search;
+- **Nodes** (Users, Posts, Groups)
+- **Edges** (Friendships, Likes, Comments, Follows, etc.)
 
--- TABLE 1: SEARCH ENTITY (Represents the results to be displayed)
-CREATE TABLE search_entity (
-    entity_id       BIGINT PRIMARY KEY, -- ID of the result (user, post, or page ID)
-    entity_type     VARCHAR(50) NOT NULL, -- Type of result: 'USER', 'POST', 'GROUP'
-    
-    -- STATIC RANK: Display priority score 
-    sort_key        INT DEFAULT 0, -- Celebrities or highly-liked posts get higher scores
-    
-    -- PRIVACY (ACL) 
-    privacy_level   INT DEFAULT 2, -- 0: Only me, 1: Friends, 2: Public
-    owner_id        BIGINT NOT NULL, -- Owner of the entity (for permissions check)
-    
-    created_at      TIMESTAMPTZ DEFAULT now()
-);
+This relationship-based structure allows the search engine to understand how different objects are connected.
 
--- TABLE 2: KEYWORD INDEX (Inverted Index - The heart of the Unicorn system)
-CREATE TABLE inverted_index (
-    term            VARCHAR(255) NOT NULL, -- Keyword (e.g., 'name:nguyen', 'lives_in:hanoi', 'friend:4')
-    entity_id       BIGINT REFERENCES search_entity(entity_id) ON DELETE CASCADE,
-    
-    -- Composite primary key to prevent duplication
-    PRIMARY KEY (term, entity_id)
-);
+---
 
--- Create Index to maximize search speed
-CREATE INDEX idx_term_search ON inverted_index(term);
+### 2. Unicorn-style Inverted Index
+
+Searching millions of records directly from the database would be too slow.
+
+To solve this problem, the system uses an **Inverted Index**, similar to Facebook's Unicorn search engine.
+
+Instead of scanning every object, the engine maps each keyword (token) to the objects containing it.
+
+Example:
+
+```
+"football"
+        ↓
+Post #15
+Post #42
+Group #8
+User #103
 ```
 
-### Schema Explanation
+This allows search results to be retrieved in milliseconds.
 
-*   **`search_entity` Table (The Result Framework):** This table contains the list of "things" that can be found. The crucial element here is the `sort_key` column[cite: 4]. When searching for "Nguyen", there might be 1 million people; the system looks at the `sort_key` and fetches those with high scores (e.g., verified accounts, 5000 friends) to display first. The `privacy_level` acts as a security barrier; results with `privacy_level = 0` (Only me) are instantly discarded if the searcher is not the `owner_id` (The ACL problem)[cite: 4].
-*   **`inverted_index` Table (The Index):** This is how the "Relationship Network" is turned into "Keywords". Instead of saving full sentences, when User "Nguyen Van A" (ID = 10, lives in Hanoi, friend of User 4) is created, the backend system separates the data and saves it as multiple terms: `name:nguyen`, `name:van`, `name:a`, `lives_in:hanoi`, and `friend:4`.
+---
 
-### 3. How the Search Magic Works (Practical Example)
+### 3. Real-Time Index Updates
 
-Imagine our "Fakebook" network currently has 3 users[cite: 4]:
-*   **User ID = 1:** Nguyen Van A (Lives in Hanoi, friend of User 2).
-*   **User ID = 2:** Tran Thi B (Lives in Hanoi, friend of User 1).
-*   **User ID = 3:** Nguyen Van C (Lives in Da Nang, highly popular verified account).
+New content should become searchable almost immediately.
 
-#### Data Storage Simulation
+Whenever a user creates or updates a post, the indexing service automatically updates the search index.
 
-**`search_entity` Table:**
-*   ID 1 | USER | sort_key: 10 | Public | Owner: 1 (Nguyen Van A, low popularity).
-*   ID 2 | USER | sort_key: 15 | Public | Owner: 2 (Tran Thi B).
-*   ID 3 | USER | sort_key: 999 | Public | Owner: 3 (Nguyen Van C, verified account so sort_key is very high).
+This workflow is inspired by Facebook's **Wormhole** architecture, which continuously synchronizes database changes with the search index.
 
-**`inverted_index` Table:**
-*   `name:nguyen` -> ID 1, ID 3.
-*   `lives_in:hanoi` -> ID 1, ID 2.
-*   `friend:2` -> ID 1.
+---
 
-#### Query Execution
+### 4. AI Search & Privacy Control
 
-Now, a user types into the search bar: *"Find people named Nguyen living in Hanoi"*``.
+The search engine combines intelligent searching with strict access control.
 
-If using a traditional Database (using `LIKE`), the server would have to scan the User table from the first row to the last to see who is named "Nguyen" AND who is in "Hanoi", causing massive fatigue for a million users.
+#### Semantic Search
 
-However, with the Unicorn design, the database performs this magic extremely fast via `and` operators for set intersection:
+Instead of matching only exact keywords, AI models can understand similar meanings.
 
-*   **Step 1:** Find IDs with `term = name:nguyen`. The Database instantly fetches: `[ID 1, ID 3]`.
-*   **Step 2:** Find IDs with `term = lives_in:hanoi`. The Database instantly fetches: `[ID 1, ID 2]`.
-*   **Step 3 (Set Intersection):** The common ID appearing in both lists is ID 1 (Nguyen Van A).
+Example:
 
-**Conclusion:** The system returns User ID 1[cite: 4]. This process happens in just a few milliseconds because the Database retrieves data directly using the Primary Key, completely avoiding a full-scan!
+```
+Italian coffee
+        ↓
+Cappuccino
+Espresso
+Latte
+```
+
+#### Access Control (ACL)
+
+Every search result is filtered by privacy settings.
+
+For example:
+
+- Public → Everyone can see it.
+- Friends → Only friends can access it.
+- Private → Only the owner can view it.
+
+This ensures users never receive results they do not have permission to access.
+
+---
+
+# Database Schema
+
+The search database consists of three main tables.
+
+## 1. Objects
+
+Stores every searchable entity in the system.
+
+```sql
+objects
+```
+
+Main fields:
+
+- `id` – Unique object ID
+- `type` – USER, POST, GROUP
+- `sort_key` – Ranking score
+- `owner_id` – Object owner
+- `privacy_level` – Access permission
+- `created_at` – Creation timestamp
+
+This table stores metadata used for ranking and permission filtering.
+
+---
+
+## 2. Tokens
+
+Stores every unique searchable keyword.
+
+```sql
+tokens
+```
+
+Example:
+
+| ID | Token |
+|----|--------|
+| 1 | football |
+| 2 | coffee |
+| 3 | fakebook |
+
+Each keyword appears only once.
+
+---
+
+## 3. Token_Object (Inverted Index)
+
+Connects keywords with searchable objects.
+
+```sql
+token_object
+```
+
+Example:
+
+| Token | Object |
+|--------|---------|
+| football | Post #15 |
+| football | Group #8 |
+| coffee | Post #42 |
+
+Instead of searching every post, the system directly looks up the related objects through this table.
+
+---
+
+# Search Workflow
+
+When a user performs a search, the system follows these steps:
+
+### Step 1. Tokenize the Query
+
+Example:
+
+```
+"Fakebook Search"
+```
+
+↓
+
+```
+fakebook
+search
+```
+
+---
+
+### Step 2. Find Token IDs
+
+Search each keyword inside the **Tokens** table.
+
+Example:
+
+```
+fakebook → Token ID = 8
+search → Token ID = 25
+```
+
+---
+
+### Step 3. Retrieve Matching Objects
+
+Use the **Token_Object** table to obtain all related object IDs.
+
+---
+
+### Step 4. Apply Security Filters
+
+Join with the **Objects** table and remove objects that the current user cannot access.
+
+Examples:
+
+- Private posts
+- Friends-only content
+- Blocked users
+
+---
+
+### Step 5. Rank Results
+
+Sort the remaining objects using:
+
+- Popularity (`sort_key`)
+- Relevance
+- Creation time (optional)
+
+---
+
+### Step 6. Return Final Results
+
+Retrieve the complete data from the main application database (Users, Posts, Groups) and return the final search results to the user.
+
+---
+
+# Key Features
+
+- Fast keyword search using an Inverted Index
+- Scalable architecture for millions of objects
+- Real-time indexing
+- Privacy-aware search
+- AI-powered semantic search
+- Flexible support for multiple object types
+- Simple and extensible database design
+
+---
+
+# Future Improvements
+
+Possible enhancements include:
+
+- Full-text ranking (TF-IDF / BM25)
+- Vector search using embeddings
+- Personalized search ranking
+- Typo correction
+- Search suggestions (Autocomplete)
+- Trending search keywords
+- Distributed indexing and sharding
+- Elasticsearch integration
