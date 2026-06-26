@@ -3,7 +3,7 @@ using System.Text;
 
 namespace Backend_Search_Fakebook.Helper
 {
-
+    // Hàm Tokenize: tách chuỗi các từ 
     public static class TextHelper 
     {
         public static List<string> Tokenize (string text)

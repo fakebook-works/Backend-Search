@@ -1,4 +1,5 @@
 ﻿using Backend_Search_Fakebook.Models;
+using Backend_Search_Fakebook.Services;
 using Microsoft.EntityFrameworkCore;
 
 namespace Backend_Search_Fakebook
@@ -15,7 +16,10 @@ namespace Backend_Search_Fakebook
             
             // Add services to the container.
             builder.Services.AddControllersWithViews();
+            builder.Services.AddScoped<IndexerService>(); // IndexerService: để phục vụ việc tách từ và lưu vào database
+            builder.Services.AddScoped<SearchService>(); // SearchService: để phục vụ việc tìm kiếm và trả về kết quả cho người dùng
 
+            // Lệnh Build sẽ khóa sổ và đóng gói toàn bộ các đăng ký ở trên lại
             var app = builder.Build();
 
             // Configure the HTTP request pipeline.

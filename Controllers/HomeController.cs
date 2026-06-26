@@ -1,4 +1,6 @@
-﻿using Backend_Search_Fakebook.Models;
+﻿using Backend_Search_Fakebook.Helper;
+using Backend_Search_Fakebook.Models;
+using Backend_Search_Fakebook.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Diagnostics;
@@ -7,13 +9,17 @@ namespace Backend_Search_Fakebook.Controllers
 {
     public class HomeController : Controller
     {
-        // Khai báo biến context -> truy cập database
-        private readonly FakebookMinhContext _context; 
+        // Khai báo biến 
+        private readonly FakebookMinhContext _context;
+        private readonly IndexerService _indexerService;
+        private readonly SearchService _searchService;
 
         // Constructor
-        public HomeController(FakebookMinhContext context)
+        public HomeController(FakebookMinhContext context, IndexerService indexerService, SearchService searchService)
         {
             _context = context;
+            _indexerService = indexerService; 
+            _searchService = searchService; 
         }
 
         // Hàm xử lý tìm kiếm
@@ -39,6 +45,45 @@ namespace Backend_Search_Fakebook.Controllers
 
             // Gửi kết quả tìm kiếm về View
             return View(ketquaTimKiem);
+        }
+
+
+        //Hàm thử nghiệm tách từ
+        [HttpGet] // Khai báo đây là một API phương thức GET (GET: dùng để lấy dữ liệu)
+        public IActionResult TestTachTu(string text)
+        {
+            // Dùng toán tử 3 ngôi rút gọn 4 dòng if thành 1 dòng, và dùng IsNullOrWhiteSpace
+            text = string.IsNullOrWhiteSpace(text) ? "Trần Lê Minh" : text;
+
+            return Json(new
+            {
+                VanBanGoc = text,
+                // Gọi thẳng cỗ máy tách từ ở đây, không cần tạo biến tạm
+                KetQuaSauKhiTach = TextHelper.Tokenize(text)
+            });
+        }
+
+
+        // Xây dựng API tìm kiếm
+        [HttpGet] 
+        public IActionResult searchAPI (string keyword)
+        {
+            // Gọi Service để xử lý  thuật toán
+            var listKetQua = _searchService.ExecuteSearchAPI(keyword);
+
+            return Json(new
+            {
+                TuKhoaTimKiem = keyword,
+                TongSoKetqua = listKetQua.Count,
+                DDuLieuTho = listKetQua.Select(x => new
+                {
+                    x.Id,
+                    x.Type,
+                    x.SortKey,
+                    x.PrivacyLevel,
+                    DanhSachTuKhoa = x.Tokens.Select(t => t.TokenText)
+                })
+            }); // Trả về dữ liệu dạng JSON
         }
 
         public IActionResult Privacy()
