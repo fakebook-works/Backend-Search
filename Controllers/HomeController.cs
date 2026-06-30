@@ -10,9 +10,9 @@ namespace Backend_Search_Fakebook.Controllers
     public class HomeController : Controller
     {
         // Khai báo biến 
-        private readonly FakebookMinhContext _context;
-        private readonly IndexerService _indexerService;
-        private readonly SearchService _searchService;
+        private readonly FakebookMinhContext _context; // truy cập vào Database
+        private readonly IndexerService _indexerService; //để gọi tokenizer
+        private readonly SearchService _searchService; //để gọi thuật toán search
 
         // Constructor
         public HomeController(FakebookMinhContext context, IndexerService indexerService, SearchService searchService)
@@ -68,7 +68,7 @@ namespace Backend_Search_Fakebook.Controllers
         [HttpGet] 
         public IActionResult searchAPI (string keyword)
         {
-            // Gọi Service để xử lý  thuật toán
+            // Gọi Service để xử lý thuật toán
             var listKetQua = _searchService.ExecuteSearchAPI(keyword);
 
             return Json(new

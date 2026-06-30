@@ -8,7 +8,7 @@ namespace Backend_Search_Fakebook.Services
     {
         private readonly FakebookMinhContext _context;
 
-        // Tiêm Database vào Service (Constructor)
+        // Tiêm Database vào SearchService (Constructor)
         public SearchService(FakebookMinhContext context)
         {
             _context = context;

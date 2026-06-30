@@ -7,7 +7,7 @@ namespace Backend_Search_Fakebook.Services
     {
         private readonly FakebookMinhContext _context;
 
-        // Tiêm Database vào Service
+        // Tiêm Database vào IndexerService
         public IndexerService(FakebookMinhContext context)
         {
             _context = context;
@@ -19,7 +19,7 @@ namespace Backend_Search_Fakebook.Services
             // 1. TẠO THỰC THỂ (Ghi User vào bảng objects)
             var newObject = new Models.Object
             {
-                // Dùng thời gian hiện tại làm ID giả định (Vì DB của em chưa có Auto-increment)
+                // Dùng thời gian hiện tại làm ID giả định (Vì DB không có Auto-increment)
                 Id = DateTime.Now.Ticks,
                 Type = "USER",
                 SortKey = 50, // Điểm nổi tiếng mặc định
