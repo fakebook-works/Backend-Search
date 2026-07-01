@@ -5,10 +5,6 @@ CREATE TABLE objects (
     
     -- Dữ liệu hiển thị
     sort_key        INT DEFAULT 0,           -- Điểm nổi tiếng để xếp hạng ưu tiên
-    
-    -- Hàng rào bảo mật (Quan trọng)
-    owner_id        BIGINT NOT NULL,         -- ID của User tạo ra Object này
-    privacy_level   INT DEFAULT 2,           -- 0: Private, 1: Friends, 2: Public
 );
 
 -- 2. BẢNG TOKENS (Kho từ khóa tự động)
