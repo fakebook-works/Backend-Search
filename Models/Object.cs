@@ -6,7 +6,7 @@ namespace BackEndSearchFakebook.Models
     {
         // Nhận ID từ bên ngoài (Database gốc sinh ra, không dùng Identity tự tăng)
         public long Id { get; set; }
-        public string Type { get; set; } = null!;
+        public short Type { get; set; } 
         public int? SortKey { get; set; }
 
         // Đã xóa OwnerId và PrivacyLevel theo chuẩn Microservices

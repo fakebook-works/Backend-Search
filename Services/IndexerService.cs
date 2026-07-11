@@ -16,13 +16,13 @@ namespace BackEndSearchFakebook.Services
 
         /// API 1: Lưu Object với ID truyền vào từ hệ thống gốc và tự động lập chỉ mục băm từ khóa
 
-        public async Task SyncAndIndexNewObjectAsync(long id, string type, string textContent)
+        public async Task SyncAndIndexNewObjectAsync(long id, short type, string textContent)
         {
             // 1. TẠO THỰC THỂ TỔNG QUÁT (Dùng chính xác ID và TYPE được truyền từ ngoài vào)
             var newObject = new Models.Object
             {
                 Id = id,                   // ID gốc truyền sang, không tự sinh ngẫu nhiên
-                Type = type.ToUpper().Trim(), // Loại thực thể (USER, GROUP, POST)
+                Type = type, // Loại thực thể (USER, GROUP, POST)
                 SortKey = 50               // Điểm nổi tiếng mặc định ban đầu
             };
 

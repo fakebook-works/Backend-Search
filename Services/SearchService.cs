@@ -15,9 +15,9 @@ namespace BackEndSearchFakebook.Services
         }
 
         // API 1: Thêm Object
-        public bool AddObject(long id, string type, string textContent)
+        public bool AddObject(long id, short type, string textContent)
         {
-            var newObj = new Models.Object { Id = id, Type = type.ToUpper(), SortKey = 0 };
+            var newObj = new Models.Object { Id = id, Type = type, SortKey = 0 };
 
             List<string> tokens = TextHelper.Tokenize(textContent);
             foreach (var t in tokens)
@@ -98,8 +98,7 @@ namespace BackEndSearchFakebook.Services
             string firstToken = tokens.First();
 
             return await _context.Objects
-                .Where(o => o.Type == "USER" || o.Type == "GROUP")
-                .Where(o => o.Tokens.Any(t => t.TokenText.StartsWith(firstToken)))
+                .Where(o => o.Type == 1 || o.Type == 2).Where(o => o.Tokens.Any(t => t.TokenText.StartsWith(firstToken)))
                 .OrderByDescending(o => o.SortKey)
                 .Select(o => o.Id)
                 .Take(5)

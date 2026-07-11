@@ -12,8 +12,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace BackEndSearchFakebook.Migrations
 {
     [DbContext(typeof(FakebookMinhContext))]
-    [Migration("20260701032039_RemoveOwnerId")]
-    partial class RemoveOwnerId
+    [Migration("20260711151522_InitialCreate")]
+    partial class InitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -37,10 +37,9 @@ namespace BackEndSearchFakebook.Migrations
                         .HasDefaultValue(0)
                         .HasColumnName("sort_key");
 
-                    b.Property<string>("Type")
-                        .IsRequired()
+                    b.Property<short>("Type")
                         .HasMaxLength(50)
-                        .HasColumnType("character varying(50)")
+                        .HasColumnType("smallint")
                         .HasColumnName("type");
 
                     b.HasKey("Id")
