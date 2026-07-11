@@ -1,0 +1,35 @@
+﻿## Thư mục Build đầu ra (Quan trọng nhất)
+[Dd]ebug/
+[Dd]ebugPS/
+[Rr]elease/
+[Rr]eleasePS/
+x64/
+x86/
+[Bb]in/
+[Oo]bj/
+
+## Thư mục cấu hình ẩn của Visual Studio (Rất nặng và chứa cache cá nhân)
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+## File cấu hình cá nhân hoặc chứa thông tin nhạy cảm
+# Thường appsettings.Development.json hoặc appsettings.json có thể giữ lại,
+# nhưng nếu có chứa mật khẩu/connection string thật thì nên bỏ ra.
+# secrets.json
+
+## Rider / JetBrains IDEs (Nếu sau này bạn có dùng)
+.idea/
+*.sln.iml
+
+## Thư mục sinh ra do chạy Docker (Nếu bạn chạy Dockerfile)
+.dockerignore
+
+## Khác
+Generated Files/
+_ReSharper*/
+[Tt]est[搁Result]/
+[Cc]overage/
+*.log
