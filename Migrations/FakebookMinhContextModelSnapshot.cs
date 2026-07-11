@@ -34,10 +34,9 @@ namespace BackEndSearchFakebook.Migrations
                         .HasDefaultValue(0)
                         .HasColumnName("sort_key");
 
-                    b.Property<string>("Type")
-                        .IsRequired()
+                    b.Property<short>("Type")
                         .HasMaxLength(50)
-                        .HasColumnType("character varying(50)")
+                        .HasColumnType("smallint")
                         .HasColumnName("type");
 
                     b.HasKey("Id")

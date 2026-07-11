@@ -20,7 +20,7 @@ namespace BackEndSearchFakebook.Controllers
         // API 1: Thêm Object (Dùng phương thức POST)
         // Gọi tới: POST https://localhost:xxxx/api/searchengine/add
         [HttpPost("add")]
-        public async Task<IActionResult> AddObject(long id, string type, string textContent)
+        public async Task<IActionResult> AddObject(long id, short type, string textContent)
         {
             await _indexerService.SyncAndIndexNewObjectAsync(id, type, textContent);
             return Ok(new { status = "Success", message = "Đã đánh chỉ mục thành công" });
