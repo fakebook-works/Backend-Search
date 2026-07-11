@@ -1,7 +1,7 @@
 ﻿-- 1. BẢNG OBJECTS (Lưu thực thể & Phân quyền)
 CREATE TABLE objects (
     id       BIGINT PRIMARY KEY, -- ID tự động tăng
-    type     VARCHAR(50) NOT NULL,    -- Phân loại: 'USER', 'POST', 'GROUP'
+    type     SMALLINT NOT NULL,    -- Phân loại: 'USER', 'POST', 'GROUP'
     
     -- Dữ liệu hiển thị
     sort_key        INT DEFAULT 0,           -- Điểm nổi tiếng để xếp hạng ưu tiên
