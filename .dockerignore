@@ -1,0 +1,15 @@
+.git/
+.github/
+.idea/
+.vs/
+**/bin/
+**/obj/
+**/TestResults/
+**/coverage/
+*.log
+*.suo
+*.user
+.env
+.env.*
+appsettings.Local.json
+**/secrets.json

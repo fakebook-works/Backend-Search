@@ -1,6 +1,53 @@
-@BackEndSearchFakebook_HostAddress = http://localhost:5191
+@host = http://localhost:5191
+@internalSecret = <value-from-secret-manager>
+@gatewaySecret = <value-from-secret-manager>
 
-GET {{BackEndSearchFakebook_HostAddress}}/weatherforecast/
-Accept: application/json
+### Liveness
+GET {{host}}/health/live
 
-###
+### Readiness
+GET {{host}}/health/ready
+
+### Upsert an internal search index
+PUT {{host}}/internal/search/indexes/1001
+Content-Type: application/json
+X-Internal-SearchService-Secret: {{internalSecret}}
+
+{
+  "objectType": "user",
+  "text": "Nguyen Van An"
+}
+
+### Delete an internal search index
+DELETE {{host}}/internal/search/indexes/1001
+X-Internal-SearchService-Secret: {{internalSecret}}
+
+### Record a view from an internal service
+POST {{host}}/internal/search/indexes/1001/views
+X-Internal-SearchService-Secret: {{internalSecret}}
+
+### GraphQL fast search through a trusted Gateway
+POST {{host}}/graphql
+Content-Type: application/json
+X-Gateway-Secret: {{gatewaySecret}}
+
+{
+  "query": "query FastSearch($keyword: String!) { fastSearch(keyword: $keyword) { __typename ... on UserSearchResult { referenceId } ... on GroupSearchResult { referenceId } } }",
+  "variables": {
+    "keyword": "nguyen"
+  }
+}
+
+### GraphQL typed user search with bounded paging
+POST {{host}}/graphql
+Content-Type: application/json
+X-Gateway-Secret: {{gatewaySecret}}
+
+{
+  "query": "query SearchUsers($keyword: String!, $pageNumber: Int!, $pageSize: Int!) { searchUsers(keyword: $keyword, pageNumber: $pageNumber, pageSize: $pageSize) { items { referenceId } pageInfo { pageNumber pageSize hasPreviousPage hasNextPage } } }",
+  "variables": {
+    "keyword": "bong",
+    "pageNumber": 1,
+    "pageSize": 20
+  }
+}

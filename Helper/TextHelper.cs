@@ -13,7 +13,8 @@ namespace BackEndSearchFakebook.Helper
                 return new List<string>(); // Trả về mảng rỗng nếu đầu vào trống
             }
             // 1. Chuyển toàn bộ thành chữ thường (Lowercase)
-            string lowerText = text.ToLower().Trim();
+            // Invariant casing keeps indexed tokens stable across hosts with different cultures.
+            string lowerText = text.ToLowerInvariant().Trim();
 
             // 2. Loại bỏ dấu tiếng Việt
             string noAccentText = RemoveDiacritics(lowerText);

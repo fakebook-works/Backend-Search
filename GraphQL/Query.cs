@@ -1,27 +1,156 @@
-﻿using BackEndSearchFakebook.Services;
+using BackEndSearchFakebook.Contracts;
+using BackEndSearchFakebook.Services;
 using HotChocolate;
 
-namespace BackEndSearchFakebook.GraphQL
-{
-    // Class chứa các API Đọc/Tìm kiếm dữ liệu qua GraphQL
-    public class Query
-    {
-        [GraphQLDescription("API 5: Tìm kiếm nhanh cố định top 5 User hoặc Group có sortKey cao nhất")]
-        public async Task<List<long>> GetFastSearch(string keyword, [Service] SearchService searchService)
-        {
-            // Thêm await khi gọi xuống tầng service
-            return await searchService.FastSearchAsync(keyword);
-        }
+namespace BackEndSearchFakebook.GraphQL;
 
-        [GraphQLDescription("API 6: Tìm kiếm chậm trên toàn bộ hệ thống (Có phân trang)")]
-        public async Task<List<long>> GetSlowSearch(
-       string keyword,
-       [Service] SearchService searchService,
-       int pageNumber = 1, // Mặc định lấy trang 1
-       int pageSize = 20   // Mặc định trả về 20 kết quả mỗi trang
-   )
+public sealed class Query
+{
+    [GraphQLDescription("Tìm nhanh top 5 User hoặc Group; dùng __typename để phân biệt loại reference.")]
+    public async Task<IReadOnlyList<IFastSearchResult?>> GetFastSearch(
+        string keyword,
+        [Service] SearchService searchService,
+        CancellationToken cancellationToken)
+    {
+        ValidateKeyword(keyword);
+
+        var candidates = await searchService.FastSearchAsync(keyword, cancellationToken);
+        return candidates
+            .Select<SearchCandidate, IFastSearchResult?>(candidate => candidate.ObjectType switch
+            {
+                SearchObjectType.User => new UserSearchResult(candidate.ReferenceId),
+                SearchObjectType.Group => new GroupSearchResult(candidate.ReferenceId),
+                _ => throw new InvalidOperationException(
+                    $"Fast search returned unsupported object type {candidate.ObjectType}.")
+            })
+            .ToArray();
+    }
+
+    [GraphQLDescription("Tìm User theo từ khóa; chỉ trả referenceId để service sở hữu hydrate profile.")]
+    public async Task<UserSearchPage> GetSearchUsers(
+        string keyword,
+        [Service] SearchService searchService,
+        int pageNumber = 1,
+        int pageSize = 20,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateSearchArguments(keyword, pageNumber, pageSize);
+        var page = await searchService.SearchByTypeAsync(
+            keyword,
+            SearchObjectType.User,
+            pageNumber,
+            pageSize,
+            cancellationToken);
+
+        return new UserSearchPage(
+            page.ReferenceIds.Select(id => (UserSearchResult?)new UserSearchResult(id)).ToArray(),
+            SearchPageMapper.PageInfo(page));
+    }
+
+    [GraphQLDescription("Tìm Group theo từ khóa; chỉ trả referenceId để service sở hữu hydrate dữ liệu Group.")]
+    public async Task<GroupSearchPage> GetSearchGroups(
+        string keyword,
+        [Service] SearchService searchService,
+        int pageNumber = 1,
+        int pageSize = 20,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateSearchArguments(keyword, pageNumber, pageSize);
+        var page = await searchService.SearchByTypeAsync(
+            keyword,
+            SearchObjectType.Group,
+            pageNumber,
+            pageSize,
+            cancellationToken);
+
+        return new GroupSearchPage(
+            page.ReferenceIds.Select(id => (GroupSearchResult?)new GroupSearchResult(id)).ToArray(),
+            SearchPageMapper.PageInfo(page));
+    }
+
+    [GraphQLDescription("Tìm Feed Post theo từ khóa; chỉ trả referenceId, không quyết định privacy/content.")]
+    public async Task<FeedPostSearchPage> GetSearchFeedPosts(
+        string keyword,
+        [Service] SearchService searchService,
+        int pageNumber = 1,
+        int pageSize = 20,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateSearchArguments(keyword, pageNumber, pageSize);
+        var page = await searchService.SearchByTypeAsync(
+            keyword,
+            SearchObjectType.FeedPost,
+            pageNumber,
+            pageSize,
+            cancellationToken);
+
+        return new FeedPostSearchPage(
+            page.ReferenceIds.Select(id => (FeedPostSearchResult?)new FeedPostSearchResult(id)).ToArray(),
+            SearchPageMapper.PageInfo(page));
+    }
+
+    [GraphQLDescription("Tìm Group Post theo từ khóa; chỉ trả referenceId, không quyết định privacy/content.")]
+    public async Task<GroupPostSearchPage> GetSearchGroupPosts(
+        string keyword,
+        [Service] SearchService searchService,
+        int pageNumber = 1,
+        int pageSize = 20,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateSearchArguments(keyword, pageNumber, pageSize);
+        var page = await searchService.SearchByTypeAsync(
+            keyword,
+            SearchObjectType.GroupPost,
+            pageNumber,
+            pageSize,
+            cancellationToken);
+
+        return new GroupPostSearchPage(
+            page.ReferenceIds.Select(id => (GroupPostSearchResult?)new GroupPostSearchResult(id)).ToArray(),
+            SearchPageMapper.PageInfo(page));
+    }
+
+    [GraphQLDescription("Tìm Reel theo từ khóa; chỉ trả referenceId, không quyết định privacy/content.")]
+    public async Task<ReelSearchPage> GetSearchReels(
+        string keyword,
+        [Service] SearchService searchService,
+        int pageNumber = 1,
+        int pageSize = 20,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateSearchArguments(keyword, pageNumber, pageSize);
+        var page = await searchService.SearchByTypeAsync(
+            keyword,
+            SearchObjectType.Reel,
+            pageNumber,
+            pageSize,
+            cancellationToken);
+
+        return new ReelSearchPage(
+            page.ReferenceIds.Select(id => (ReelSearchResult?)new ReelSearchResult(id)).ToArray(),
+            SearchPageMapper.PageInfo(page));
+    }
+
+    private static void ValidateSearchArguments(
+        string keyword,
+        int pageNumber,
+        int pageSize)
+    {
+        ValidateKeyword(keyword);
+        if (!SearchContractValidator.TryValidatePaging(
+                pageNumber,
+                pageSize,
+                out var message))
         {
-            return await searchService.SlowSearchAsync(keyword, pageNumber, pageSize);
+            throw SearchGraphQlErrors.InvalidInput(message);
+        }
+    }
+
+    private static void ValidateKeyword(string keyword)
+    {
+        if (!SearchContractValidator.TryValidateKeyword(keyword, out var message))
+        {
+            throw SearchGraphQlErrors.InvalidInput(message);
         }
     }
 }

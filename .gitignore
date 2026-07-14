@@ -24,12 +24,16 @@ x86/
 .idea/
 *.sln.iml
 
-## Thư mục sinh ra do chạy Docker (Nếu bạn chạy Dockerfile)
-.dockerignore
+## Cấu hình cục bộ có thể chứa secrets
+.env
+.env.*
+!.env.example
+appsettings.Local.json
+**/secrets.json
 
 ## Khác
 Generated Files/
 _ReSharper*/
-[Tt]est[搁Result]/
+[Tt]est[Rr]esult*/
 [Cc]overage/
 *.log

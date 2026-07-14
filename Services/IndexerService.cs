@@ -1,4 +1,7 @@
-﻿using BackEndSearchFakebook.Helper;
+using System.Buffers.Binary;
+using System.Security.Cryptography;
+using System.Text;
+using BackEndSearchFakebook.Helper;
 using BackEndSearchFakebook.Models;
 using Microsoft.EntityFrameworkCore;
 
@@ -8,54 +11,170 @@ namespace BackEndSearchFakebook.Services
     {
         private readonly FakebookMinhContext _context;
 
-        // Tiêm Database Context vào Service
         public IndexerService(FakebookMinhContext context)
         {
             _context = context;
         }
 
-        /// API 1: Lưu Object với ID truyền vào từ hệ thống gốc và tự động lập chỉ mục băm từ khóa
-
-        public async Task SyncAndIndexNewObjectAsync(long id, short type, string textContent)
+        public async Task SyncAndIndexNewObjectAsync(
+            long id,
+            short type,
+            string textContent,
+            CancellationToken cancellationToken = default)
         {
-            // 1. TẠO THỰC THỂ TỔNG QUÁT (Dùng chính xác ID và TYPE được truyền từ ngoài vào)
-            var newObject = new Models.Object
+            // The legacy create endpoint is intentionally idempotent. A caller may retry a
+            // timed-out request without creating a duplicate object or token relationship.
+            await UpsertObjectAsync(id, type, textContent, cancellationToken);
+        }
+
+        public async Task<bool> UpsertObjectAsync(
+            long id,
+            short type,
+            string textContent,
+            CancellationToken cancellationToken = default)
+        {
+            await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
+            await AcquireObjectLockAsync(id, cancellationToken);
+
+            var searchObject = await _context.Objects
+                .Include(candidate => candidate.Tokens)
+                .FirstOrDefaultAsync(candidate => candidate.Id == id, cancellationToken);
+
+            var created = searchObject is null;
+            if (created)
             {
-                Id = id,                   // ID gốc truyền sang, không tự sinh ngẫu nhiên
-                Type = type, // Loại thực thể (USER, GROUP, POST)
-                SortKey = 50               // Điểm nổi tiếng mặc định ban đầu
-            };
-
-            // 2. GỌI HÀM TÁCH TỪ (Cắt nội dung chuỗi văn bản thành danh sách từ khóa sạch)
-            List<string> tuKhoaSach = TextHelper.Tokenize(textContent);
-
-            // 3 & 4. KIỂM TRA KHO TOKENS VÀ ĐÁNH ĐƯỜNG DÂY LIÊN KẾT (Vào bảng token_object)
-            foreach (var chu in tuKhoaSach)
-            {
-                // Truy vấn bất đồng bộ xem từ khóa này đã từng xuất hiện trong kho chưa
-                var existingToken = await _context.Tokens.FirstOrDefaultAsync(t => t.TokenText == chu);
-
-                if (existingToken == null)
+                searchObject = new Models.Object
                 {
-                    // Nếu CHƯA CÓ -> Tạo dòng chữ mới.
-                    // ID của chữ được gán cố định bằng mã băm Hash đại diện cho chính ký tự đó, không dùng ngẫu nhiên ngầm!
-                    existingToken = new Token
-                    {
-                        Id = Math.Abs((long)chu.GetHashCode()), // Mã định danh số độc nhất dựa trên text của chữ
-                        TokenText = chu
-                    };
-                }
-
-                // Nhét Token vào tập hợp của newObject. 
-                // Ma thuật Entity Framework Core tự biết chèn dữ liệu liên kết Nhiều - Nhiều vào bảng 'token_object'
-                newObject.Tokens.Add(existingToken);
+                    Id = id,
+                    Type = type,
+                    SortKey = 0
+                };
+                _context.Objects.Add(searchObject);
+            }
+            else
+            {
+                // Do not assign SortKey here: index refreshes must preserve ranking state.
+                searchObject!.Type = type;
+                searchObject.Tokens.Clear();
             }
 
-            // 5. THÊM VÀO KHO ĐỆM VÀ ĐẨY XUỐNG POSTGRESQL BẤT ĐỒNG BỘ
-            _context.Objects.Add(newObject);
+            await AttachPersistedTokensAsync(searchObject!, textContent, cancellationToken);
+            await _context.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return created;
+        }
 
-            // Chạy lệnh lưu đồng thời xuống Database, giải phóng luồng xử lý
-            await _context.SaveChangesAsync();
+        public async Task<bool> UpdateObjectTextIfPresentAsync(
+            long id,
+            string textContent,
+            CancellationToken cancellationToken = default)
+        {
+            await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
+            await AcquireObjectLockAsync(id, cancellationToken);
+
+            var searchObject = await _context.Objects
+                .Include(candidate => candidate.Tokens)
+                .FirstOrDefaultAsync(candidate => candidate.Id == id, cancellationToken);
+
+            if (searchObject is null)
+            {
+                await transaction.CommitAsync(cancellationToken);
+                return false;
+            }
+
+            searchObject.Tokens.Clear();
+            await AttachPersistedTokensAsync(searchObject, textContent, cancellationToken);
+            await _context.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return true;
+        }
+
+        public async Task<bool> DeleteObjectIfPresentAsync(
+            long id,
+            CancellationToken cancellationToken = default)
+        {
+            await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
+            await AcquireObjectLockAsync(id, cancellationToken);
+
+            var searchObject = await _context.Objects
+                .FirstOrDefaultAsync(candidate => candidate.Id == id, cancellationToken);
+
+            if (searchObject is null)
+            {
+                await transaction.CommitAsync(cancellationToken);
+                return false;
+            }
+
+            _context.Objects.Remove(searchObject);
+            await _context.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return true;
+        }
+
+        private async Task AttachPersistedTokensAsync(
+            Models.Object searchObject,
+            string textContent,
+            CancellationToken cancellationToken)
+        {
+            // A common ordering prevents two transactions indexing overlapping token sets
+            // from acquiring unique-index locks in opposite orders.
+            var normalizedTokenTexts = TextHelper.Tokenize(textContent)
+                .Distinct(StringComparer.Ordinal)
+                .OrderBy(tokenText => tokenText, StringComparer.Ordinal)
+                .ToArray();
+
+            if (normalizedTokenTexts.Length == 0)
+            {
+                return;
+            }
+
+            foreach (var tokenText in normalizedTokenTexts)
+            {
+                var tokenId = CreateDeterministicTokenId(tokenText);
+
+                // Different objects may be indexed concurrently. The unique token_text
+                // constraint is the authority; a SHA truncation collision on the primary
+                // key deliberately fails instead of associating an object with a wrong token.
+                await _context.Database.ExecuteSqlInterpolatedAsync(
+                    $"""
+                    INSERT INTO tokens (id, token_text)
+                    VALUES ({tokenId}, {tokenText})
+                    ON CONFLICT (token_text) DO NOTHING;
+                    """,
+                    cancellationToken);
+            }
+
+            var persistedTokens = await _context.Tokens
+                .Where(token => normalizedTokenTexts.Contains(token.TokenText))
+                .ToListAsync(cancellationToken);
+
+            if (persistedTokens.Count != normalizedTokenTexts.Length)
+            {
+                throw new InvalidOperationException("Not all normalized search tokens could be persisted.");
+            }
+
+            foreach (var token in persistedTokens)
+            {
+                searchObject.Tokens.Add(token);
+            }
+        }
+
+        private Task<int> AcquireObjectLockAsync(long id, CancellationToken cancellationToken)
+        {
+            // Snowflake IDs are globally unique, so the ID itself is a stable lock key.
+            // Transaction-scoped locks release automatically on commit or rollback.
+            return _context.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT pg_advisory_xact_lock({id});",
+                cancellationToken);
+        }
+
+        private static long CreateDeterministicTokenId(string normalizedTokenText)
+        {
+            var hash = SHA256.HashData(Encoding.UTF8.GetBytes(normalizedTokenText));
+            var tokenId = BinaryPrimitives.ReadInt64BigEndian(hash.AsSpan(0, sizeof(long))) & long.MaxValue;
+
+            // Keep IDs strictly positive for the documented database contract.
+            return tokenId == 0 ? 1 : tokenId;
         }
     }
 }

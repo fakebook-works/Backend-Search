@@ -1,5 +1,6 @@
 ﻿using BackEndSearchFakebook.Helper;
 using BackEndSearchFakebook.Models;
+using BackEndSearchFakebook.Contracts;
 using Microsoft.EntityFrameworkCore;
 
 namespace BackEndSearchFakebook.Services
@@ -14,113 +15,113 @@ namespace BackEndSearchFakebook.Services
             _context = context;
         }
 
-        // API 1: Thêm Object
-        public bool AddObject(long id, short type, string textContent)
-        {
-            var newObj = new Models.Object { Id = id, Type = type, SortKey = 0 };
-
-            List<string> tokens = TextHelper.Tokenize(textContent);
-            foreach (var t in tokens)
-            {
-                var existingToken = _context.Tokens.FirstOrDefault(x => x.TokenText == t)
-                                 ?? new Token { Id = DateTime.Now.Ticks + t.GetHashCode(), TokenText = t };
-                newObj.Tokens.Add(existingToken);
-            }
-
-            _context.Objects.Add(newObj);
-            _context.SaveChanges();
-            return true;
-        }
-
-        // API 2: Sửa Object (Cập nhật text - Bất đồng bộ)
-        public async Task<bool> EditObjectAsync(long id, string newTextContent)
-        {
-            // 1. Tìm object kèm theo danh sách Token cũ
-            var obj = await _context.Objects
-                .Include(o => o.Tokens)
-                .FirstOrDefaultAsync(o => o.Id == id);
-
-            if (obj == null) return false;
-
-            // 2. Xóa các Token cũ liên quan (dọn dẹp dữ liệu cũ)
-            obj.Tokens.Clear();
-
-            // 3. Băm nội dung mới thành Token mới
-            List<string> tokens = TextHelper.Tokenize(newTextContent);
-            foreach (var t in tokens)
-            {
-                var existingToken = await _context.Tokens.FirstOrDefaultAsync(x => x.TokenText == t)
-                                 ?? new Token { Id = DateTime.Now.Ticks + t.GetHashCode(), TokenText = t };
-                obj.Tokens.Add(existingToken);
-            }
-
-            // 4. Lưu thay đổi xuống DB
-            await _context.SaveChangesAsync();
-            return true;
-        }
-
-        // API 3: Xóa Object (Bất đồng bộ)
-        public async Task<bool> DeleteObjectAsync(long id)
-        {
-            // Tìm object theo ID
-            var obj = await _context.Objects.FirstOrDefaultAsync(o => o.Id == id);
-
-            if (obj == null) return false;
-
-            // Xóa Object
-            _context.Objects.Remove(obj);
-
-            // Lưu thay đổi bất đồng bộ
-            await _context.SaveChangesAsync();
-            return true;
-        }
-
         // API 4: Tự động tăng điểm SortKey khi có người truy cập (Bất đồng bộ)
-        public async Task<bool> RecordViewAsync(long id)
+        public async Task<bool> RecordViewAsync(
+            long id,
+            CancellationToken cancellationToken = default)
         {
-            var obj = await _context.Objects.FirstOrDefaultAsync(o => o.Id == id);
+            var updatedRows = await _context.Objects
+                .Where(searchObject => searchObject.Id == id)
+                .ExecuteUpdateAsync(
+                    setters => setters.SetProperty(
+                        searchObject => searchObject.SortKey,
+                        searchObject => (searchObject.SortKey ?? 0) + 1),
+                    cancellationToken);
 
-            if (obj == null) return false;
-
-            // Tăng SortKey
-            obj.SortKey += 1;
-
-            // Lưu thay đổi bất đồng bộ
-            await _context.SaveChangesAsync();
-            return true;
+            return updatedRows == 1;
         }
 
         // API 5: Search Nhanh (Chỉ USER, GROUP / Lấy 5 cái đỉnh nhất)
-        public async Task<List<long>> FastSearchAsync(string keyword)
+        public async Task<IReadOnlyList<SearchCandidate>> FastSearchAsync(
+            string keyword,
+            CancellationToken cancellationToken = default)
         {
-            List<string> tokens = TextHelper.Tokenize(keyword);
-            if (!tokens.Any()) return new List<long>();
-            string firstToken = tokens.First();
+            var tokens = GetDistinctQueryTokens(keyword);
+            if (tokens.Length == 0) return Array.Empty<SearchCandidate>();
 
-            return await _context.Objects
-                .Where(o => o.Type == 1 || o.Type == 2).Where(o => o.Tokens.Any(t => t.TokenText.StartsWith(firstToken)))
-                .OrderByDescending(o => o.SortKey)
-                .Select(o => o.Id)
+            var query = _context.Objects
+                .AsNoTracking()
+                .Where(o => o.Type == (short)SearchObjectType.User ||
+                            o.Type == (short)SearchObjectType.Group);
+
+            query = ApplyTokenPrefixes(query, tokens);
+            var candidates = await query
+                .OrderByDescending(o => o.SortKey ?? 0)
+                .ThenBy(o => o.Type)
+                .ThenBy(o => o.Id)
+                .Select(o => new { o.Id, o.Type })
                 .Take(5)
-                .ToListAsync(); // Đã sửa thành ToListAsync() để giải phóng bộ nhớ ngầm
+                .ToListAsync(cancellationToken); // Đã sửa thành ToListAsync() để giải phóng bộ nhớ ngầm
+
+            return candidates
+                .Select(candidate => new SearchCandidate(
+                    candidate.Id,
+                    (SearchObjectType)candidate.Type))
+                .ToArray();
         }
 
-        // API 6: Search Chậm (Dùng Paging)
-        public async Task<List<long>> SlowSearchAsync(string keyword, int pageNumber = 1, int pageSize = 20)
+        public async Task<SearchCandidatePage> SearchByTypeAsync(
+            string keyword,
+            SearchObjectType objectType,
+            int pageNumber = 1,
+            int pageSize = 20,
+            CancellationToken cancellationToken = default)
         {
-            List<string> tokens = TextHelper.Tokenize(keyword);
-            if (!tokens.Any()) return new List<long>();
-            string firstToken = tokens.First();
+            var tokens = GetDistinctQueryTokens(keyword);
+            if (tokens.Length == 0)
+            {
+                return new SearchCandidatePage(
+                    Array.Empty<long>(),
+                    pageNumber,
+                    pageSize,
+                    false);
+            }
 
-            return await _context.Objects
-                .Where(o => o.Tokens.Any(t => t.TokenText.StartsWith(firstToken)))
-                .OrderByDescending(o => o.SortKey)
-                .Select(o => o.Id)
-                // Bỏ qua các kết quả của những trang trước đó
+            var query = _context.Objects
+                .AsNoTracking()
+                .Where(searchObject => searchObject.Type == (short)objectType);
+
+            query = ApplyTokenPrefixes(query, tokens);
+
+            var candidates = await query
+                .OrderByDescending(searchObject => searchObject.SortKey ?? 0)
+                .ThenBy(searchObject => searchObject.Id)
+                .Select(searchObject => searchObject.Id)
                 .Skip((pageNumber - 1) * pageSize)
-                // Lấy đúng số lượng kết quả yêu cầu cho trang hiện tại
-                .Take(pageSize)
-                .ToListAsync();
+                .Take(pageSize + 1)
+                .ToListAsync(cancellationToken);
+
+            var hasNextPage = candidates.Count > pageSize;
+            if (hasNextPage)
+            {
+                candidates.RemoveAt(candidates.Count - 1);
+            }
+
+            return new SearchCandidatePage(
+                candidates,
+                pageNumber,
+                pageSize,
+                hasNextPage);
+        }
+
+        private static string[] GetDistinctQueryTokens(string keyword) =>
+            TextHelper.Tokenize(keyword)
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
+
+        private static IQueryable<Models.Object> ApplyTokenPrefixes(
+            IQueryable<Models.Object> query,
+            IReadOnlyList<string> tokenPrefixes)
+        {
+            // Each entered term must match at least one indexed token. Building one
+            // correlated EXISTS per prefix keeps the expression translatable by EF/Npgsql.
+            foreach (var tokenPrefix in tokenPrefixes)
+            {
+                query = query.Where(searchObject => searchObject.Tokens.Any(
+                    token => token.TokenText.StartsWith(tokenPrefix)));
+            }
+
+            return query;
         }
     }
 }

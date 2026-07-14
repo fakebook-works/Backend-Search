@@ -10,12 +10,11 @@ namespace BackEndSearchFakebook.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            // Chỉ cần lệnh chuyển đổi, không cần lệnh CreateTable nữa
-            migrationBuilder.Sql("UPDATE objects SET type = '1' WHERE type = 'USER' OR type = 'user';");
-            migrationBuilder.Sql("UPDATE objects SET type = '2' WHERE type = 'GROUP' OR type = 'group';");
-            migrationBuilder.Sql("UPDATE objects SET type = '3' WHERE type = 'POST' OR type = 'post';");
-            migrationBuilder.Sql("UPDATE objects SET type = '1' WHERE type NOT IN ('1', '2', '3');");
-            migrationBuilder.Sql("ALTER TABLE objects ALTER COLUMN type TYPE smallint USING type::smallint;");
+            throw new InvalidOperationException(
+                "The legacy InitialCreate migration is intentionally blocked because its " +
+                "type mapping conflicts with the canonical Search types and it assumes an " +
+                "existing schema. Decide between a database rebuild/full replay and an " +
+                "in-place data migration before creating the replacement migration.");
         }
     }
 }
