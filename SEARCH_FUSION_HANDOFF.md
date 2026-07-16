@@ -14,6 +14,10 @@ type Query {
   searchReels(keyword: String!, pageNumber: Int! = 1, pageSize: Int! = 20): ReelSearchPage!
 }
 
+type Mutation {
+  recordSearchResultView(referenceId: ID!): Boolean!
+}
+
 union FastSearchResult = UserSearchResult | GroupSearchResult
 
 type UserSearchResult { referenceId: ID! }
@@ -35,7 +39,7 @@ Các `items` đều nullable (`[Type]!`) để lookup có thể trả `null` khi
 ## Việc giao cho agent API Gateway
 
 1. Thêm source folder `Gateway/schema/Search` từ `schema.graphqls` và `schema-settings.json` của Search.
-2. Giữ source name `Search`, `clientName: fusion`, URL development `http://localhost:5191/graphql`, URL production `http://search:8080/graphql` hoặc sửa hostname đúng deployment thực tế.
+2. Giữ source name `Search`, `clientName: search-fusion`, URL development `http://localhost:1004/graphql`, URL production `http://search:1004/graphql`.
 3. Thêm source-schema extension sau cho Search và SocialGraph:
 
 ```graphql
@@ -60,6 +64,8 @@ extend type Query {
 
 5. Regenerate `gateway.far`; kiểm tra query plan có transition Search -> SocialGraph.
 6. Gateway phải tự thay thế header client gửi vào và forward trusted `X-Gateway-Secret`, `X-User-Id`, `Authorization`, `X-Correlation-ID`. Không forward nguyên `X-User-Id` hoặc `X-Gateway-Secret` từ client.
+7. Frontend gọi `recordSearchResultView` best-effort khi mở một kết quả. Mutation
+   bắt buộc trusted user và Search chỉ tăng rank một lần cho mỗi viewer/reference/ngày UTC.
 7. Thêm integration tests cho fast union, năm typed search, stale lookup, denied lookup, nullable item và trusted-header propagation.
 
 ## Việc giao cho agent SocialGraph
@@ -159,6 +165,6 @@ Fusion reference hydrate được dữ liệu nhưng không tự loại và lấ
 
 1. Mỗi loại index text nào: User name hay name+bio; Group name hay name+bio; Post/Reel content có gồm hashtag không?
 2. Multi-keyword hiện dùng AND: mỗi từ nhập phải prefix-match ít nhất một token đã index. Có muốn đổi sang OR hoặc chỉ prefix từ cuối không?
-3. Fast top 5 hiện là top 5 chung giữa User và Group. Có muốn 5 chung hay 5 mỗi loại?
+3. Fast search trả tối đa 8 kết quả chung giữa User và Group để khớp dropdown frontend.
 4. Database hiện tại có được drop/recreate và full replay từ SocialGraph không? EF initial migration cũ đang sai mapping và không dựng được fresh DB; không được chạy migration đó.
 5. Producer có thể gửi monotonic `sourceVersion`, outbox và full replay không?

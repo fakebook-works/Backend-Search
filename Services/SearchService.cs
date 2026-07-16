@@ -31,7 +31,42 @@ namespace BackEndSearchFakebook.Services
             return updatedRows == 1;
         }
 
-        // API 5: Search Nhanh (Chỉ USER, GROUP / Lấy 5 cái đỉnh nhất)
+        public async Task<SearchViewRecordResult> RecordUniqueViewerDayAsync(
+            long viewerId,
+            long id,
+            CancellationToken cancellationToken = default)
+        {
+            var updatedRows = await _context.Database.ExecuteSqlInterpolatedAsync(
+                $"""
+                WITH inserted AS (
+                    INSERT INTO search.search_object_views (user_id, object_id, viewed_on)
+                    SELECT {viewerId}, {id}, (CURRENT_TIMESTAMP AT TIME ZONE 'UTC')::date
+                    FROM search.objects
+                    WHERE id = {id}
+                    ON CONFLICT (user_id, object_id, viewed_on) DO NOTHING
+                    RETURNING object_id
+                )
+                UPDATE search.objects AS target
+                SET sort_key = COALESCE(target.sort_key, 0) + 1
+                FROM inserted
+                WHERE target.id = inserted.object_id;
+                """,
+                cancellationToken);
+
+            if (updatedRows == 1)
+            {
+                return SearchViewRecordResult.Recorded;
+            }
+
+            var exists = await _context.Objects
+                .AsNoTracking()
+                .AnyAsync(item => item.Id == id, cancellationToken);
+            return exists
+                ? SearchViewRecordResult.AlreadyRecorded
+                : SearchViewRecordResult.NotFound;
+        }
+
+        // Quick search is intentionally bounded for the anchored frontend dropdown.
         public async Task<IReadOnlyList<SearchCandidate>> FastSearchAsync(
             string keyword,
             CancellationToken cancellationToken = default)
@@ -50,7 +85,7 @@ namespace BackEndSearchFakebook.Services
                 .ThenBy(o => o.Type)
                 .ThenBy(o => o.Id)
                 .Select(o => new { o.Id, o.Type })
-                .Take(5)
+                .Take(8)
                 .ToListAsync(cancellationToken); // Đã sửa thành ToListAsync() để giải phóng bộ nhớ ngầm
 
             return candidates

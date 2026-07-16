@@ -28,7 +28,7 @@ public sealed class GraphQLSchemaContractTests
     ];
 
     [Fact]
-    public async Task Schema_ExposesExactlyTheSixReadOnlySearchQueries()
+    public async Task Schema_ExposesSixQueriesAndTrustedViewFeedbackMutation()
     {
         var schema = await ExportSchemaAsync();
         var query = ExtractDefinition(schema, "type Query");
@@ -41,8 +41,10 @@ public sealed class GraphQLSchemaContractTests
             .ToArray();
 
         Assert.Equal(ExpectedQueryFields, actualFields);
-        Assert.DoesNotContain("mutation:", schema, StringComparison.Ordinal);
-        Assert.DoesNotContain("type Mutation", schema, StringComparison.Ordinal);
+        var mutation = ExtractDefinition(schema, "type Mutation");
+        Assert.Contains("recordSearchResultView(", mutation, StringComparison.Ordinal);
+        Assert.Contains("referenceId: ID!", mutation, StringComparison.Ordinal);
+        Assert.Contains("): Boolean!", mutation, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -109,7 +111,8 @@ public sealed class GraphQLSchemaContractTests
         services.AddLogging();
         services
             .AddGraphQLServer()
-            .AddQueryType<Query>();
+            .AddQueryType<Query>()
+            .AddMutationType<Mutation>();
 
         await using var provider = services.BuildServiceProvider();
         var resolver = provider.GetRequiredService<IRequestExecutorProvider>();

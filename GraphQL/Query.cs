@@ -6,7 +6,7 @@ namespace BackEndSearchFakebook.GraphQL;
 
 public sealed class Query
 {
-    [GraphQLDescription("Tìm nhanh top 5 User hoặc Group; dùng __typename để phân biệt loại reference.")]
+    [GraphQLDescription("Tìm nhanh tối đa 8 User hoặc Group; dùng __typename để phân biệt loại reference.")]
     public async Task<IReadOnlyList<IFastSearchResult?>> GetFastSearch(
         string keyword,
         [Service] SearchService searchService,

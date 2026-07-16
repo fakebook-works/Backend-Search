@@ -46,6 +46,7 @@ namespace BackEndSearchFakebook
                 .ValidateOnStart();
             builder.Services.AddHttpContextAccessor();
             builder.Services.AddScoped<TrustedGatewayUserAccessor>();
+            builder.Services.AddHostedService<SearchFeedbackSchemaHostedService>();
 
             builder.Services
                 .AddAuthentication()
@@ -107,10 +108,11 @@ namespace BackEndSearchFakebook
                     "database",
                     tags: new[] { "ready" });
 
-            // GraphQL chỉ phục vụ truy vấn tìm kiếm; mọi thao tác ghi dùng REST nội bộ.
+            // Search queries plus one trusted, deduplicated viewer-feedback mutation.
             builder.Services
                 .AddGraphQLServer()
-                .AddQueryType<Query>();
+                .AddQueryType<Query>()
+                .AddMutationType<Mutation>();
 
             // Tiến hành Build và khóa sổ các dịch vụ đã đăng ký ở trên
             var app = builder.Build();
@@ -140,7 +142,7 @@ namespace BackEndSearchFakebook
             app.MapHealthChecks("/health/ready", readinessOptions).AllowAnonymous();
             app.MapHealthChecks("/health", readinessOptions).AllowAnonymous();
 
-            // Ánh xạ các luồng dữ liệu REST API (api/SearchEngine/...)
+            // REST nội bộ đồng bộ index; controller tự bảo vệ bằng service secret.
             app.MapControllers();
 
             // Ánh xạ cổng GraphQL duy nhất cho Microservice này

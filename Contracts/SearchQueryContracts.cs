@@ -16,3 +16,10 @@ public sealed record SearchCandidatePage(
     int PageNumber,
     int PageSize,
     bool HasNextPage);
+
+public enum SearchViewRecordResult
+{
+    Recorded,
+    AlreadyRecorded,
+    NotFound
+}

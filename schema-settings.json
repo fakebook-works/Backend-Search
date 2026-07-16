@@ -3,15 +3,15 @@
   "transports": {
     "http": {
       "url": "{{SEARCH_URL}}",
-      "clientName": "fusion"
+      "clientName": "search-fusion"
     }
   },
   "environments": {
     "Development": {
-      "SEARCH_URL": "http://localhost:5191/graphql"
+      "SEARCH_URL": "http://localhost:1004/graphql"
     },
     "Production": {
-      "SEARCH_URL": "http://search:8080/graphql"
+      "SEARCH_URL": "http://search:1004/graphql"
     }
   }
 }

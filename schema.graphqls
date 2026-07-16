@@ -1,9 +1,10 @@
 schema {
   query: Query
+  mutation: Mutation
 }
 
 type Query {
-  "Tìm nhanh top 5 User hoặc Group; dùng __typename để phân biệt loại reference."
+  "Tìm nhanh tối đa 8 User hoặc Group; dùng __typename để phân biệt loại reference."
   fastSearch(keyword: String!): [FastSearchResult]! @cost(weight: "10")
   "Tìm User theo từ khóa; chỉ trả referenceId để service sở hữu hydrate profile."
   searchUsers(keyword: String!, pageNumber: Int! = 1, pageSize: Int! = 20): UserSearchPage!
@@ -20,6 +21,11 @@ type Query {
   "Tìm Reel theo từ khóa; chỉ trả referenceId, không quyết định privacy/content."
   searchReels(keyword: String!, pageNumber: Int! = 1, pageSize: Int! = 20): ReelSearchPage!
     @cost(weight: "10")
+}
+
+type Mutation {
+  "Records one authenticated viewer impression per search object and UTC day."
+  recordSearchResultView(referenceId: ID!): Boolean! @cost(weight: "10")
 }
 
 type FeedPostSearchPage {
@@ -79,7 +85,7 @@ type UserSearchResult {
   referenceId: ID!
 }
 
-union FastSearchResult = GroupSearchResult | UserSearchResult
+union FastSearchResult = UserSearchResult | GroupSearchResult
 
 "The purpose of the `cost` directive is to define a `weight` for GraphQL types, fields, and arguments. Static analysis can use these weights when calculating the overall cost of a query or response."
 directive @cost(

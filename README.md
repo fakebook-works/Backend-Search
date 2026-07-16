@@ -58,13 +58,8 @@ X-Internal-SearchService-Secret: <internal-secret>
 
 Endpoint trả `204` khi tăng ranking thành công và `404` nếu index không tồn tại. Đây là operation không idempotent; caller retry sẽ tăng thêm lần nữa cho đến khi contract event/idempotency key được bổ sung.
 
-Các endpoint tương thích cũ vẫn còn hoạt động:
-
-| Method | Path | Input |
-|---|---|---|
-| `POST` | `/api/SearchEngine/add` | Query `id`, `type`, `textContent` |
-| `PUT` | `/api/SearchEngine/edit/{id}` | Query `newTextContent` |
-| `DELETE` | `/api/SearchEngine/delete/{id}` | Route `id` |
+Các endpoint legacy `/api/SearchEngine/*` đã bị loại bỏ. Chỉ contract REST nội bộ
+idempotent ở trên được hỗ trợ để tránh client hoặc caller cũ bỏ qua secret và validation.
 
 ## GraphQL
 
@@ -82,12 +77,22 @@ type Query {
   searchReels(keyword: String!, pageNumber: Int! = 1, pageSize: Int! = 20): ReelSearchPage!
 }
 
+type Mutation {
+  recordSearchResultView(referenceId: ID!): Boolean!
+}
+
 union FastSearchResult = UserSearchResult | GroupSearchResult
 ```
 
-`fastSearch` trả tối đa 5 reference thuộc User (`type=0`) hoặc Group (`type=1`) và giữ thứ hạng chung. Slow search được tách thành năm field theo loại. SearchService chỉ trả `referenceId: ID!`; Gateway dùng Fusion để chuyển sang SocialGraph, nơi sở hữu profile, content, relationship và privacy. Item trong page là nullable vì object có thể đã bị xóa hoặc bị SocialGraph từ chối theo quyền xem.
+`fastSearch` trả tối đa 8 reference thuộc User (`type=0`) hoặc Group (`type=1`) và giữ thứ hạng chung. Slow search được tách thành năm field theo loại. SearchService chỉ trả `referenceId: ID!`; Gateway dùng Fusion để chuyển sang SocialGraph, nơi sở hữu profile, content, relationship và privacy. Item trong page là nullable vì object có thể đã bị xóa hoặc bị SocialGraph từ chối theo quyền xem.
 
 `pageNumber` từ 1 đến 1.000.000, `pageSize` từ 1 đến 100 và offset tối đa là 100.000 candidate. `pageInfo.hasNextPage` phản ánh candidate trong Search trước khi SocialGraph lọc privacy; không phải tổng số kết quả cuối cùng mà viewer được xem.
+
+`recordSearchResultView` chỉ nhận identity từ trusted `X-User-Id` do Gateway tạo.
+Service tự tạo bảng additive `search.search_object_views` và chỉ tăng `sort_key`
+một lần cho cùng `(viewer, reference, ngày UTC)`, nên refresh/click lặp không làm
+phồng ranking. Reference không tồn tại trả GraphQL `NOT_FOUND`; request không có
+trusted user trả `UNAUTHENTICATED`.
 
 Ví dụ:
 
@@ -107,7 +112,9 @@ query Search($keyword: String!, $page: Int!) {
 
 Trong composed schema, Gateway phải đánh dấu `referenceId` là `@shareable @inaccessible`; client sẽ truy vấn các field đã được SocialGraph hydrate thay vì thấy khóa nội bộ này.
 
-Không có GraphQL mutation ghi dữ liệu. Upsert, delete index và ghi nhận view đều là trách nhiệm của REST nội bộ. Ghi nhận view dùng `POST /internal/search/indexes/{id}/views` với `X-Internal-SearchService-Secret`.
+Upsert/delete index vẫn chỉ thuộc REST nội bộ. REST
+`POST /internal/search/indexes/{id}/views` được giữ để tương thích caller nội bộ và
+tăng trực tiếp; browser phải dùng mutation deduplicate ở trên qua Gateway.
 
 ## Export schema cho Fusion Gateway
 
@@ -171,7 +178,7 @@ Dockerfile dùng Linux .NET 8 và chỉ expose HTTP nội bộ ở port `8080`:
 
 ```powershell
 docker build -t fakebook-search .
-docker run --rm -p 5191:8080 `
+docker run --rm -p 1004:1004 `
   -e ConnectionStrings__DefaultConnection `
   -e InternalSearchService__Secret `
   -e Gateway__InternalSharedSecret `
