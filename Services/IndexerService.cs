@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using BackEndSearchFakebook.Helper;
 using BackEndSearchFakebook.Models;
+using BackEndSearchFakebook.Contracts;
 using Microsoft.EntityFrameworkCore;
 
 namespace BackEndSearchFakebook.Services
@@ -41,6 +42,7 @@ namespace BackEndSearchFakebook.Services
                 .FirstOrDefaultAsync(candidate => candidate.Id == id, cancellationToken);
 
             var created = searchObject is null;
+            var previousTokenIds = searchObject?.Tokens.Select(token => token.Id).ToArray() ?? [];
             if (created)
             {
                 searchObject = new Models.Object
@@ -60,6 +62,7 @@ namespace BackEndSearchFakebook.Services
 
             await AttachPersistedTokensAsync(searchObject!, textContent, cancellationToken);
             await _context.SaveChangesAsync(cancellationToken);
+            await DeleteUnusedTokensAsync(previousTokenIds, cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             return created;
         }
@@ -82,9 +85,11 @@ namespace BackEndSearchFakebook.Services
                 return false;
             }
 
+            var previousTokenIds = searchObject.Tokens.Select(token => token.Id).ToArray();
             searchObject.Tokens.Clear();
             await AttachPersistedTokensAsync(searchObject, textContent, cancellationToken);
             await _context.SaveChangesAsync(cancellationToken);
+            await DeleteUnusedTokensAsync(previousTokenIds, cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             return true;
         }
@@ -97,6 +102,7 @@ namespace BackEndSearchFakebook.Services
             await AcquireObjectLockAsync(id, cancellationToken);
 
             var searchObject = await _context.Objects
+                .Include(candidate => candidate.Tokens)
                 .FirstOrDefaultAsync(candidate => candidate.Id == id, cancellationToken);
 
             if (searchObject is null)
@@ -105,8 +111,10 @@ namespace BackEndSearchFakebook.Services
                 return false;
             }
 
+            var previousTokenIds = searchObject.Tokens.Select(token => token.Id).ToArray();
             _context.Objects.Remove(searchObject);
             await _context.SaveChangesAsync(cancellationToken);
+            await DeleteUnusedTokensAsync(previousTokenIds, cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             return true;
         }
@@ -121,6 +129,7 @@ namespace BackEndSearchFakebook.Services
             var normalizedTokenTexts = TextHelper.Tokenize(textContent)
                 .Distinct(StringComparer.Ordinal)
                 .OrderBy(tokenText => tokenText, StringComparer.Ordinal)
+                .Take(SearchContractValidator.MaximumIndexedTokens)
                 .ToArray();
 
             if (normalizedTokenTexts.Length == 0)
@@ -165,6 +174,28 @@ namespace BackEndSearchFakebook.Services
             // Transaction-scoped locks release automatically on commit or rollback.
             return _context.Database.ExecuteSqlInterpolatedAsync(
                 $"SELECT pg_advisory_xact_lock({id});",
+                cancellationToken);
+        }
+
+        private async Task DeleteUnusedTokensAsync(
+            long[] candidateTokenIds,
+            CancellationToken cancellationToken)
+        {
+            if (candidateTokenIds.Length == 0)
+            {
+                return;
+            }
+
+            await _context.Database.ExecuteSqlInterpolatedAsync(
+                $"""
+                DELETE FROM search.tokens AS token
+                WHERE token.id = ANY ({candidateTokenIds})
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM search.token_object AS link
+                      WHERE link.token_id = token.id
+                  );
+                """,
                 cancellationToken);
         }
 

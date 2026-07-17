@@ -1,4 +1,5 @@
 using BackEndSearchFakebook.Contracts;
+using BackEndSearchFakebook.Helper;
 using Xunit;
 
 namespace BackEndSearchFakebook.Tests;
@@ -54,6 +55,25 @@ public sealed class SearchContractValidatorTests
         Assert.False(SearchContractValidator.TryValidateKeyword(
             new string('a', SearchContractValidator.MaximumKeywordLength + 1),
             out _));
+    }
+
+    [Fact]
+    public void Tokenize_NormalizesVietnameseAndTreatsPunctuationAsSeparators()
+    {
+        Assert.Equal(
+            ["dang", "bai", "fakebook", "microservice", "2026"],
+            TextHelper.Tokenize("Đăng bài: Fakebook/Microservice, 2026!"));
+    }
+
+    [Fact]
+    public void Validation_BoundsQueryAndIndexedTokenFanout()
+    {
+        var tooManyQueryTerms = string.Join(' ', Enumerable.Range(1, SearchContractValidator.MaximumQueryTokens + 1));
+        Assert.False(SearchContractValidator.TryValidateKeyword(tooManyQueryTerms, out var queryMessage));
+        Assert.Contains("distinct terms", queryMessage);
+
+        var manyIndexedTerms = string.Join(' ', Enumerable.Range(1, SearchContractValidator.MaximumIndexedTokens + 1));
+        Assert.True(SearchContractValidator.TryValidateText(manyIndexedTerms, out var indexMessage), indexMessage);
     }
 
     [Theory]

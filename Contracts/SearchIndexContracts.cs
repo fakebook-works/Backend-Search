@@ -17,6 +17,8 @@ public static class SearchContractValidator
     public const int MaximumPageSize = 100;
     public const int MaximumPageNumber = 1_000_000;
     public const int MaximumOffset = 100_000;
+    public const int MaximumQueryTokens = 12;
+    public const int MaximumIndexedTokens = 512;
 
     public static bool IsPositiveId(long id) => id > 0;
 
@@ -71,11 +73,13 @@ public static class SearchContractValidator
             return false;
         }
 
-        if (TextHelper.Tokenize(text).Any(token => token.Length > 255))
+        var tokens = TextHelper.Tokenize(text);
+        if (tokens.Any(token => token.Length > 255))
         {
             message = "text contains a token longer than 255 characters.";
             return false;
         }
+
 
         message = string.Empty;
         return true;
@@ -92,6 +96,13 @@ public static class SearchContractValidator
         if (keyword.Length > MaximumKeywordLength)
         {
             message = $"keyword must not exceed {MaximumKeywordLength} characters.";
+            return false;
+        }
+
+
+        if (TextHelper.Tokenize(keyword).Distinct(StringComparer.Ordinal).Count() > MaximumQueryTokens)
+        {
+            message = $"keyword must not contain more than {MaximumQueryTokens} distinct terms.";
             return false;
         }
 

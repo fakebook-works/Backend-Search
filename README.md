@@ -116,6 +116,14 @@ Upsert/delete index vẫn chỉ thuộc REST nội bộ. REST
 `POST /internal/search/indexes/{id}/views` được giữ để tương thích caller nội bộ và
 tăng trực tiếp; browser phải dùng mutation deduplicate ở trên qua Gateway.
 
+## Search normalization and storage bounds
+
+Tokenizer normalization removes Vietnamese diacritics and treats punctuation/symbols as
+term boundaries, so `hello,` and `hello` match the same token. A query is limited to 12
+distinct terms, and each object indexes at most the first 512 sorted distinct terms. This
+bounds correlated-prefix SQL fanout without rejecting otherwise valid long post content.
+Updating or deleting an index also removes tokens that no longer belong to any object.
+
 ## Export schema cho Fusion Gateway
 
 Schema SDL, source extensions và transport settings được lưu tại `schema.graphqls`, `schema-extensions.graphqls` và `schema-settings.json`. Sau khi thay đổi GraphQL contract, export lại bằng:

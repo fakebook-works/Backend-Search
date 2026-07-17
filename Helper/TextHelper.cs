@@ -19,15 +19,23 @@ namespace BackEndSearchFakebook.Helper
             // 2. Loại bỏ dấu tiếng Việt
             string noAccentText = RemoveDiacritics(lowerText);
 
-            // 3. Tách chuỗi thành mảng dựa trên khoảng trắng
-            // StringSplitOptions.RemoveEmptyEntries giúp tự động vứt bỏ các khoảng trắng thừa
-            string[] tokensArray = noAccentText.Split(
-                new char[] { ' ', '\t', '\n', '\r' },
-                StringSplitOptions.RemoveEmptyEntries
-            );
+            // Punctuation and symbols delimit terms as users expect. The previous
+            // whitespace-only split indexed "hello," as a different token from "hello".
+            var tokens = new List<string>();
+            var token = new StringBuilder();
+            foreach (var character in noAccentText)
+            {
+                if (char.IsLetterOrDigit(character))
+                {
+                    token.Append(character);
+                    continue;
+                }
 
-            // Chuyển mảng (Array) thành List và trả về
-            return tokensArray.ToList();
+                FlushToken(token, tokens);
+            }
+
+            FlushToken(token, tokens);
+            return tokens;
         }
 
         // Hàm: Thuật toán bóc tách dấu tiếng Việt bằng Unicode
@@ -53,6 +61,17 @@ namespace BackEndSearchFakebook.Helper
 
             // FormC ghép các ký tự rời rạc lại thành chuỗi hoàn chỉnh
             return stringBuilder.ToString().Normalize(NormalizationForm.FormC);
+        }
+
+        private static void FlushToken(StringBuilder token, ICollection<string> tokens)
+        {
+            if (token.Length == 0)
+            {
+                return;
+            }
+
+            tokens.Add(token.ToString());
+            token.Clear();
         }
     }
  }
