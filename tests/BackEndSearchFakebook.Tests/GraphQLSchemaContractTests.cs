@@ -11,7 +11,9 @@ public sealed class GraphQLSchemaContractTests
     private static readonly string[] ExpectedQueryFields =
     [
         "fastSearch",
+        "searchDirectContacts",
         "searchFeedPosts",
+        "searchFriends",
         "searchGroupPosts",
         "searchGroups",
         "searchReels",
@@ -28,7 +30,7 @@ public sealed class GraphQLSchemaContractTests
     ];
 
     [Fact]
-    public async Task Schema_ExposesSixQueriesAndTrustedViewFeedbackMutation()
+    public async Task Schema_ExposesContactScopedSearchAndTrustedViewFeedbackMutation()
     {
         var schema = await ExportSchemaAsync();
         var query = ExtractDefinition(schema, "type Query");

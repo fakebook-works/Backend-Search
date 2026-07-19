@@ -27,6 +27,7 @@ namespace BackEndSearchFakebook
             // Đăng ký các Service xử lý Logic nghiệp vụ (Business Logic Layer)
             builder.Services.AddScoped<IndexerService>();       // Dịch vụ chuyên băm từ và ghi dữ liệu
             builder.Services.AddScoped<SearchService>();        // Dịch vụ chuyên tìm kiếm nhanh/chậm, sửa, xóa, tăng sortkey
+            builder.Services.AddMemoryCache();
 
             builder.Services
                 .AddOptions<InternalSearchServiceOptions>()
@@ -44,6 +45,51 @@ namespace BackEndSearchFakebook
                     options => FixedTimeSecretComparer.IsStrongEnough(options.InternalSharedSecret),
                     $"Gateway:InternalSharedSecret must contain at least {FixedTimeSecretComparer.MinimumSecretBytes} UTF-8 bytes.")
                 .ValidateOnStart();
+
+            builder.Services
+                .AddOptions<MessengerContactsOptions>()
+                .Bind(builder.Configuration.GetSection(MessengerContactsOptions.SectionName))
+                .Validate(
+                    options => Uri.TryCreate(options.BaseUrl, UriKind.Absolute, out var uri) &&
+                               (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps),
+                    "InternalServices:Messaging:BaseUrl must be an absolute HTTP(S) URL.")
+                .Validate(
+                    options => FixedTimeSecretComparer.IsStrongEnough(options.SharedSecret),
+                    $"InternalServices:Messaging:SharedSecret must contain at least {FixedTimeSecretComparer.MinimumSecretBytes} UTF-8 bytes.")
+                .Validate(options => options.TimeoutSeconds is >= 1 and <= 30,
+                    "InternalServices:Messaging:TimeoutSeconds must be between 1 and 30.")
+                .Validate(options => options.CacheSeconds is >= 5 and <= 300,
+                    "InternalServices:Messaging:CacheSeconds must be between 5 and 300.")
+                .ValidateOnStart();
+            builder.Services
+                .AddHttpClient<IMessengerContactClient, MessengerContactClient>((services, client) =>
+                {
+                    var options = services.GetRequiredService<Microsoft.Extensions.Options.IOptions<MessengerContactsOptions>>().Value;
+                    client.BaseAddress = new Uri(options.BaseUrl.TrimEnd('/') + "/", UriKind.Absolute);
+                    client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
+                });
+            builder.Services
+                .AddOptions<SocialGraphFriendsOptions>()
+                .Bind(builder.Configuration.GetSection(SocialGraphFriendsOptions.SectionName))
+                .Validate(
+                    options => Uri.TryCreate(options.BaseUrl, UriKind.Absolute, out var uri) &&
+                               (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps),
+                    "InternalServices:SocialGraph:BaseUrl must be an absolute HTTP(S) URL.")
+                .Validate(
+                    options => FixedTimeSecretComparer.IsStrongEnough(options.SharedSecret),
+                    $"InternalServices:SocialGraph:SharedSecret must contain at least {FixedTimeSecretComparer.MinimumSecretBytes} UTF-8 bytes.")
+                .Validate(options => options.TimeoutSeconds is >= 1 and <= 30,
+                    "InternalServices:SocialGraph:TimeoutSeconds must be between 1 and 30.")
+                .Validate(options => options.CacheSeconds is >= 5 and <= 300,
+                    "InternalServices:SocialGraph:CacheSeconds must be between 5 and 300.")
+                .ValidateOnStart();
+            builder.Services
+                .AddHttpClient<ISocialGraphFriendClient, SocialGraphFriendClient>((services, client) =>
+                {
+                    var options = services.GetRequiredService<Microsoft.Extensions.Options.IOptions<SocialGraphFriendsOptions>>().Value;
+                    client.BaseAddress = new Uri(options.BaseUrl.TrimEnd('/') + "/", UriKind.Absolute);
+                    client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
+                });
             builder.Services.AddHttpContextAccessor();
             builder.Services.AddScoped<TrustedGatewayUserAccessor>();
             builder.Services.AddHostedService<SearchFeedbackSchemaHostedService>();

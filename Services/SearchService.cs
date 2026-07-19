@@ -139,6 +139,54 @@ namespace BackEndSearchFakebook.Services
                 hasNextPage);
         }
 
+        public async Task<SearchCandidatePage> SearchUsersWithinIdsAsync(
+            string keyword,
+            IReadOnlyCollection<long> allowedUserIds,
+            int pageNumber = 1,
+            int pageSize = 20,
+            CancellationToken cancellationToken = default)
+        {
+            var tokens = GetDistinctQueryTokens(keyword);
+            var allowedIds = allowedUserIds
+                .Where(id => id > 0)
+                .Distinct()
+                .ToArray();
+            if (tokens.Length == 0 || allowedIds.Length == 0)
+            {
+                return new SearchCandidatePage(
+                    Array.Empty<long>(),
+                    pageNumber,
+                    pageSize,
+                    false);
+            }
+
+            var query = _context.Objects
+                .AsNoTracking()
+                .Where(searchObject =>
+                    searchObject.Type == (short)SearchObjectType.User &&
+                    allowedIds.Contains(searchObject.Id));
+            query = ApplyTokenPrefixes(query, tokens);
+
+            var candidates = await query
+                .OrderByDescending(searchObject => searchObject.SortKey ?? 0)
+                .ThenBy(searchObject => searchObject.Id)
+                .Select(searchObject => searchObject.Id)
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize + 1)
+                .ToListAsync(cancellationToken);
+            var hasNextPage = candidates.Count > pageSize;
+            if (hasNextPage)
+            {
+                candidates.RemoveAt(candidates.Count - 1);
+            }
+
+            return new SearchCandidatePage(
+                candidates,
+                pageNumber,
+                pageSize,
+                hasNextPage);
+        }
+
         private static string[] GetDistinctQueryTokens(string keyword) =>
             TextHelper.Tokenize(keyword)
                 .Distinct(StringComparer.Ordinal)

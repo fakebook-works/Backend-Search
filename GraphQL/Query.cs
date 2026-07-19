@@ -1,4 +1,5 @@
 using BackEndSearchFakebook.Contracts;
+using BackEndSearchFakebook.Infrastructure.Security;
 using BackEndSearchFakebook.Services;
 using HotChocolate;
 
@@ -47,7 +48,81 @@ public sealed class Query
             SearchPageMapper.PageInfo(page));
     }
 
-    [GraphQLDescription("Tìm Group theo từ khóa; chỉ trả referenceId để service sở hữu hydrate dữ liệu Group.")]
+    [GraphQLDescription("Searches only users who already have a direct Messenger conversation with the authenticated viewer.")]
+    public async Task<UserSearchPage> GetSearchDirectContacts(
+        string keyword,
+        [Service] SearchService searchService,
+        [Service] IMessengerContactClient messengerContacts,
+        [Service] TrustedGatewayUserAccessor trustedUser,
+        int pageNumber = 1,
+        int pageSize = 20,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateSearchArguments(keyword, pageNumber, pageSize);
+        if (!trustedUser.TryGetUserId(out var viewerId))
+        {
+            throw SearchGraphQlErrors.Unauthenticated();
+        }
+
+        IReadOnlyList<long> contactIds;
+        try
+        {
+            contactIds = await messengerContacts.GetDirectContactIdsAsync(viewerId, cancellationToken);
+        }
+        catch (MessengerContactsUnavailableException)
+        {
+            throw SearchGraphQlErrors.ContactScopeUnavailable();
+        }
+
+        var page = await searchService.SearchUsersWithinIdsAsync(
+            keyword,
+            contactIds,
+            pageNumber,
+            pageSize,
+            cancellationToken);
+        return new UserSearchPage(
+            page.ReferenceIds.Select(id => (UserSearchResult?)new UserSearchResult(id)).ToArray(),
+            SearchPageMapper.PageInfo(page));
+    }
+
+    [GraphQLDescription("Searches only accepted friends of the authenticated viewer.")]
+    public async Task<UserSearchPage> GetSearchFriends(
+        string keyword,
+        [Service] SearchService searchService,
+        [Service] ISocialGraphFriendClient socialGraphFriends,
+        [Service] TrustedGatewayUserAccessor trustedUser,
+        int pageNumber = 1,
+        int pageSize = 20,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateSearchArguments(keyword, pageNumber, pageSize);
+        if (!trustedUser.TryGetUserId(out var viewerId))
+        {
+            throw SearchGraphQlErrors.Unauthenticated();
+        }
+
+        IReadOnlyList<long> friendIds;
+        try
+        {
+            friendIds = await socialGraphFriends.GetFriendIdsAsync(viewerId, cancellationToken);
+        }
+        catch (FriendScopeUnavailableException)
+        {
+            throw SearchGraphQlErrors.FriendScopeUnavailable();
+        }
+
+        var page = await searchService.SearchUsersWithinIdsAsync(
+            keyword,
+            friendIds,
+            pageNumber,
+            pageSize,
+            cancellationToken);
+        return new UserSearchPage(
+            page.ReferenceIds.Select(id => (UserSearchResult?)new UserSearchResult(id)).ToArray(),
+            SearchPageMapper.PageInfo(page));
+    }
+
+    [GraphQLDescription("Searches groups by keyword and returns owning-service references.")]
     public async Task<GroupSearchPage> GetSearchGroups(
         string keyword,
         [Service] SearchService searchService,
