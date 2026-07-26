@@ -122,6 +122,47 @@ public sealed class Query
             SearchPageMapper.PageInfo(page));
     }
 
+    [GraphQLDescription("Searches the authenticated viewer's friends, followed users or followers within the relationship IDs supplied by SocialGraph REST.")]
+    public async Task<UserSearchPage> GetSearchProfileConnections(
+        string keyword,
+        ProfileConnectionType connectionType,
+        [Service] SearchService searchService,
+        [Service] ISocialGraphFriendClient socialGraphFriends,
+        [Service] TrustedGatewayUserAccessor trustedUser,
+        int pageNumber = 1,
+        int pageSize = 20,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateSearchArguments(keyword, pageNumber, pageSize);
+        if (!trustedUser.TryGetUserId(out var viewerId))
+        {
+            throw SearchGraphQlErrors.Unauthenticated();
+        }
+
+        IReadOnlyList<long> connectionIds;
+        try
+        {
+            connectionIds = await socialGraphFriends.GetProfileConnectionIdsAsync(
+                viewerId,
+                connectionType,
+                cancellationToken);
+        }
+        catch (ProfileConnectionScopeUnavailableException)
+        {
+            throw SearchGraphQlErrors.ProfileConnectionScopeUnavailable();
+        }
+
+        var page = await searchService.SearchUsersWithinIdsAsync(
+            keyword,
+            connectionIds,
+            pageNumber,
+            pageSize,
+            cancellationToken);
+        return new UserSearchPage(
+            page.ReferenceIds.Select(id => (UserSearchResult?)new UserSearchResult(id)).ToArray(),
+            SearchPageMapper.PageInfo(page));
+    }
+
     [GraphQLDescription("Searches groups by keyword and returns owning-service references.")]
     public async Task<GroupSearchPage> GetSearchGroups(
         string keyword,

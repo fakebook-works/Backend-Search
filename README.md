@@ -134,6 +134,17 @@ dotnet run -- schema export --output schema.graphqls
 
 Sau export, giữ `schema-settings.json` với source name `Search`, `clientName` là `fusion` và URL theo environment trước khi compose lại `gateway.far`.
 
+## Tìm kiếm theo quan hệ profile
+
+Frontend chỉ gọi GraphQL qua Gateway. Với `searchProfileConnections`, SearchService lấy user đã xác thực từ trusted Gateway header, gọi REST nội bộ của SocialGraph để lấy đúng tập ID quan hệ, sau đó mới áp dụng token/prefix search trong index Search:
+
+```text
+Frontend -> Gateway GraphQL -> SearchService
+                           -> SocialGraph REST /internal/users/{id}/profile-connection-ids
+```
+
+`connectionType` hỗ trợ `FRIENDS`, `FOLLOWING`, `FOLLOWERS`. Query một ký tự được chấp nhận. SocialGraph vẫn sở hữu quan hệ và profile; Search chỉ sở hữu index/ranking và chỉ trả reference để Fusion hydrate lại user.
+
 ## Health và OpenAPI
 
 | Endpoint | Ý nghĩa |

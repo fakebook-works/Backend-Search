@@ -15,6 +15,9 @@ internal static class SearchGraphQlErrors
     public static GraphQLException FriendScopeUnavailable() =>
         Create("FRIEND_SCOPE_UNAVAILABLE", "The friend scope is temporarily unavailable.");
 
+    public static GraphQLException ProfileConnectionScopeUnavailable() =>
+        Create("PROFILE_CONNECTION_SCOPE_UNAVAILABLE", "The requested profile-connection scope is temporarily unavailable.");
+
     public static GraphQLException NotFound(long id) =>
         Create("NOT_FOUND", $"Search object {id} was not found.");
 

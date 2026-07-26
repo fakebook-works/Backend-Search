@@ -9,6 +9,13 @@ public enum SearchObjectType : short
     Reel = 4
 }
 
+public enum ProfileConnectionType
+{
+    Friends,
+    Following,
+    Followers
+}
+
 public sealed record SearchCandidate(long ReferenceId, SearchObjectType ObjectType);
 
 public sealed record SearchCandidatePage(

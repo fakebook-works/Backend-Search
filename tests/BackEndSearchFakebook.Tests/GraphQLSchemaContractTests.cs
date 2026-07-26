@@ -16,6 +16,7 @@ public sealed class GraphQLSchemaContractTests
         "searchFriends",
         "searchGroupPosts",
         "searchGroups",
+        "searchProfileConnections",
         "searchReels",
         "searchUsers"
     ];

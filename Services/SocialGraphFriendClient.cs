@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Net.Http.Json;
 using BackEndSearchFakebook.Configuration;
+using BackEndSearchFakebook.Contracts;
 using BackEndSearchFakebook.Infrastructure.Security;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
@@ -10,6 +11,7 @@ namespace BackEndSearchFakebook.Services;
 public interface ISocialGraphFriendClient
 {
     Task<IReadOnlyList<long>> GetFriendIdsAsync(long userId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<long>> GetProfileConnectionIdsAsync(long userId, ProfileConnectionType connectionType, CancellationToken cancellationToken = default);
 }
 
 public sealed class SocialGraphFriendClient(
@@ -84,8 +86,84 @@ public sealed class SocialGraphFriendClient(
         }
     }
 
+    public async Task<IReadOnlyList<long>> GetProfileConnectionIdsAsync(
+        long userId,
+        ProfileConnectionType connectionType,
+        CancellationToken cancellationToken = default)
+    {
+        if (connectionType == ProfileConnectionType.Friends)
+        {
+            return await GetFriendIdsAsync(userId, cancellationToken);
+        }
+        if (userId <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(userId));
+        }
+
+        var associationType = connectionType switch
+        {
+            ProfileConnectionType.Following => 3,
+            ProfileConnectionType.Followers => 4,
+            _ => throw new ArgumentOutOfRangeException(nameof(connectionType))
+        };
+        var cacheKey = $"social-graph:profile-connection-ids:{userId.ToString(CultureInfo.InvariantCulture)}:{associationType}";
+        if (cache.TryGetValue(cacheKey, out long[]? cached) && cached is not null)
+        {
+            return cached;
+        }
+
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"internal/users/{userId.ToString(CultureInfo.InvariantCulture)}/profile-connection-ids?associationType={associationType}");
+        request.Headers.TryAddWithoutValidation(InternalSecretHeader, _options.SharedSecret);
+        var correlationId = httpContextAccessor.HttpContext?.Request.Headers[SearchHeaders.CorrelationId].ToString();
+        if (!string.IsNullOrWhiteSpace(correlationId))
+        {
+            request.Headers.TryAddWithoutValidation(SearchHeaders.CorrelationId, correlationId);
+        }
+
+        HttpResponseMessage response;
+        try
+        {
+            response = await httpClient.SendAsync(request, cancellationToken);
+        }
+        catch (TaskCanceledException exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            throw new ProfileConnectionScopeUnavailableException("SocialGraph profile-connection lookup timed out.", exception);
+        }
+        catch (HttpRequestException exception)
+        {
+            throw new ProfileConnectionScopeUnavailableException("SocialGraph profile-connection lookup failed.", exception);
+        }
+
+        using (response)
+        {
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new ProfileConnectionScopeUnavailableException(
+                    $"SocialGraph profile-connection lookup returned HTTP {(int)response.StatusCode}.");
+            }
+
+            var payload = await response.Content.ReadFromJsonAsync<FriendIdsPayload>(cancellationToken: cancellationToken);
+            if (payload is null)
+            {
+                throw new ProfileConnectionScopeUnavailableException("SocialGraph profile-connection lookup returned an empty response.");
+            }
+
+            var ids = payload.UserIds
+                .Where(id => id > 0 && id != userId)
+                .Distinct()
+                .ToArray();
+            cache.Set(cacheKey, ids, TimeSpan.FromSeconds(_options.CacheSeconds));
+            return ids;
+        }
+    }
+
     private sealed record FriendIdsPayload(IReadOnlyList<long> UserIds);
 }
 
 public sealed class FriendScopeUnavailableException(string message, Exception? innerException = null)
+    : Exception(message, innerException);
+
+public sealed class ProfileConnectionScopeUnavailableException(string message, Exception? innerException = null)
     : Exception(message, innerException);

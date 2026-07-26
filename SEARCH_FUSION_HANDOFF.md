@@ -4,6 +4,8 @@ Tài liệu này là contract bàn giao giữa Search, API Gateway và SocialGra
 
 ## Search source schema hiện đã triển khai
 
+Profile relationship search bổ sung field `searchProfileConnections(keyword, connectionType, pageNumber, pageSize)`. Search lấy tập ID `FRIENDS/FOLLOWING/FOLLOWERS` qua REST nội bộ SocialGraph, sau đó mới query index; browser vẫn chỉ truy cập field này qua Gateway/Fusion.
+
 ```graphql
 type Query {
   fastSearch(keyword: String!): [FastSearchResult]!

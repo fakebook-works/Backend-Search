@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using BackEndSearchFakebook.Configuration;
+using BackEndSearchFakebook.Contracts;
 using BackEndSearchFakebook.Services;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Caching.Memory;
@@ -65,6 +66,41 @@ public sealed class SocialGraphFriendClientTests
             new HttpContextAccessor());
 
         await Assert.ThrowsAsync<FriendScopeUnavailableException>(() => client.GetFriendIdsAsync(1));
+    }
+
+    [Theory]
+    [InlineData(ProfileConnectionType.Following, 3)]
+    [InlineData(ProfileConnectionType.Followers, 4)]
+    public async Task GetProfileConnectionIds_UsesTheRequestedSocialGraphRelationship(
+        ProfileConnectionType connectionType,
+        int associationType)
+    {
+        var handler = new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("{\"userIds\":[2,3,2,1]}", Encoding.UTF8, "application/json")
+        });
+        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://social-graph/") };
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        var client = new SocialGraphFriendClient(
+            httpClient,
+            cache,
+            Options.Create(new SocialGraphFriendsOptions
+            {
+                BaseUrl = "http://social-graph",
+                SharedSecret = "social-graph-test-secret-at-least-32-bytes",
+                CacheSeconds = 45
+            }),
+            new HttpContextAccessor());
+
+        var first = await client.GetProfileConnectionIdsAsync(1, connectionType);
+        var second = await client.GetProfileConnectionIdsAsync(1, connectionType);
+
+        Assert.Equal(new long[] { 2, 3 }, first);
+        Assert.Equal(first, second);
+        Assert.Equal(1, handler.CallCount);
+        Assert.Equal(
+            $"/internal/users/1/profile-connection-ids?associationType={associationType}",
+            handler.LastRequest!.RequestUri!.PathAndQuery);
     }
 
     private sealed class RecordingHandler(Func<HttpRequestMessage, HttpResponseMessage> response) : HttpMessageHandler
