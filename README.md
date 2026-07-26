@@ -71,6 +71,8 @@ Schema hiện tại chỉ gồm:
 type Query {
   fastSearch(keyword: String!): [FastSearchResult]!
   searchUsers(keyword: String!, pageNumber: Int! = 1, pageSize: Int! = 20): UserSearchPage!
+  searchDirectContacts(keyword: String!, pageNumber: Int! = 1, pageSize: Int! = 20): UserSearchPage!
+  searchFriends(keyword: String!, pageNumber: Int! = 1, pageSize: Int! = 20): UserSearchPage!
   searchGroups(keyword: String!, pageNumber: Int! = 1, pageSize: Int! = 20): GroupSearchPage!
   searchFeedPosts(keyword: String!, pageNumber: Int! = 1, pageSize: Int! = 20): FeedPostSearchPage!
   searchGroupPosts(keyword: String!, pageNumber: Int! = 1, pageSize: Int! = 20): GroupPostSearchPage!
@@ -164,6 +166,10 @@ Các giá trị nhạy cảm trong `appsettings.json` được để trống có
 | `ConnectionStrings:DefaultConnection` | `ConnectionStrings__DefaultConnection` |
 | `InternalSearchService:Secret` | `InternalSearchService__Secret` |
 | `Gateway:InternalSharedSecret` | `Gateway__InternalSharedSecret` |
+| `InternalServices:Messaging:BaseUrl` | `InternalServices__Messaging__BaseUrl` |
+| `InternalServices:Messaging:SharedSecret` | `InternalServices__Messaging__SharedSecret` |
+| `InternalServices:SocialGraph:BaseUrl` | `InternalServices__SocialGraph__BaseUrl` |
+| `InternalServices:SocialGraph:SharedSecret` | `InternalServices__SocialGraph__SharedSecret` |
 
 Ví dụ cho local development bằng user-secrets:
 
@@ -193,7 +199,7 @@ Không chạy migration legacy `20260711151522_InitialCreate`: migration này đ
 
 ## Container Linux
 
-Dockerfile dùng Linux .NET 8 và chỉ expose HTTP nội bộ ở port `8080`:
+Dockerfile dùng Linux .NET 8 và chỉ expose HTTP nội bộ ở port `1004`:
 
 ```powershell
 docker build -t fakebook-search .
