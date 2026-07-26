@@ -20,6 +20,11 @@ namespace BackEndSearchFakebook
         {
             var builder = WebApplication.CreateBuilder(args);
 
+            builder.Services.AddInternalRequestSigning(
+                builder.Configuration,
+                "InternalSearchService:Secret",
+                InternalSearchServiceAuthenticationHandler.HeaderName);
+
             // Đăng ký kết nối Cơ sở dữ liệu PostgreSQL vào hệ thống
             builder.Services.AddDbContext<FakebookMinhContext>(options =>
                 options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
@@ -67,7 +72,8 @@ namespace BackEndSearchFakebook
                     var options = services.GetRequiredService<Microsoft.Extensions.Options.IOptions<MessengerContactsOptions>>().Value;
                     client.BaseAddress = new Uri(options.BaseUrl.TrimEnd('/') + "/", UriKind.Absolute);
                     client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
-                });
+                })
+                .AddHttpMessageHandler<InternalRequestSigningHandler>();
             builder.Services
                 .AddOptions<SocialGraphFriendsOptions>()
                 .Bind(builder.Configuration.GetSection(SocialGraphFriendsOptions.SectionName))
@@ -89,7 +95,8 @@ namespace BackEndSearchFakebook
                     var options = services.GetRequiredService<Microsoft.Extensions.Options.IOptions<SocialGraphFriendsOptions>>().Value;
                     client.BaseAddress = new Uri(options.BaseUrl.TrimEnd('/') + "/", UriKind.Absolute);
                     client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
-                });
+                })
+                .AddHttpMessageHandler<InternalRequestSigningHandler>();
             builder.Services.AddHttpContextAccessor();
             builder.Services.AddScoped<TrustedGatewayUserAccessor>();
             builder.Services.AddHostedService<SearchFeedbackSchemaHostedService>();
@@ -174,6 +181,7 @@ namespace BackEndSearchFakebook
 
             app.UseRouting();
             app.UseMiddleware<GatewayTrustMiddleware>();
+            app.UseMiddleware<InternalRequestSignatureMiddleware>();
             app.UseAuthentication();
             app.UseAuthorization();
 
