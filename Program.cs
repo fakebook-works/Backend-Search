@@ -10,7 +10,7 @@ using BackEndSearchFakebook.Services;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.OpenApi.Models;
+using Microsoft.OpenApi;
 
 namespace BackEndSearchFakebook
 {
@@ -19,6 +19,7 @@ namespace BackEndSearchFakebook
         public static void Main(string[] args)
         {
             var builder = WebApplication.CreateBuilder(args);
+            builder.Services.AddFakebookServiceDefaults(builder.Configuration, "fakebook-search");
 
             builder.Services.AddInternalRequestSigning(
                 builder.Configuration,
@@ -99,7 +100,10 @@ namespace BackEndSearchFakebook
                 .AddHttpMessageHandler<InternalRequestSigningHandler>();
             builder.Services.AddHttpContextAccessor();
             builder.Services.AddScoped<TrustedGatewayUserAccessor>();
-            builder.Services.AddHostedService<SearchFeedbackSchemaHostedService>();
+            if (builder.Configuration.GetValue("Database:ApplySchemaOnStartup", true))
+            {
+                builder.Services.AddHostedService<SearchFeedbackSchemaHostedService>();
+            }
 
             builder.Services
                 .AddAuthentication()
@@ -142,16 +146,11 @@ namespace BackEndSearchFakebook
                         Name = InternalSearchServiceAuthenticationHandler.HeaderName,
                         Description = "Internal service credential. It must never be supplied by an end user."
                     });
-                options.AddSecurityRequirement(new OpenApiSecurityRequirement
+                options.AddSecurityRequirement(document => new OpenApiSecurityRequirement
                 {
-                    [new OpenApiSecurityScheme
-                    {
-                        Reference = new OpenApiReference
-                        {
-                            Type = ReferenceType.SecurityScheme,
-                            Id = InternalSearchServiceAuthenticationHandler.SchemeName
-                        }
-                    }] = Array.Empty<string>()
+                    [new OpenApiSecuritySchemeReference(
+                        InternalSearchServiceAuthenticationHandler.SchemeName,
+                        document)] = []
                 });
             });
 
