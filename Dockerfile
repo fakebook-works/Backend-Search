@@ -1,7 +1,9 @@
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS base
 WORKDIR /app
 # Health probes need an HTTP client; the Debian runtime image ships none.
-RUN apt-get update && apt-get install -y --no-install-recommends curl \n    && rm -rf /var/lib/apt/lists/*
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
 EXPOSE 1004
 ENV ASPNETCORE_HTTP_PORTS=1004
 

@@ -6,6 +6,7 @@
 **/obj/
 **/TestResults/
 **/coverage/
+tests/
 *.log
 *.suo
 *.user
