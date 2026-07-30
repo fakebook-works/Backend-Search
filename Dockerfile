@@ -1,7 +1,8 @@
 FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine AS base
 WORKDIR /app
-# Health probes need an HTTP client.
-RUN apk add --no-cache curl
+# Health probes need an HTTP client. Npgsql loads GSSAPI dynamically even when
+# password authentication is used.
+RUN apk add --no-cache curl krb5-libs
 EXPOSE 1004
 ENV ASPNETCORE_HTTP_PORTS=1004
 
