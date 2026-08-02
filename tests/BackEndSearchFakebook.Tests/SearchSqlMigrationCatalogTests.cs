@@ -1,4 +1,5 @@
 using BackEndSearchFakebook.Infrastructure;
+using Xunit;
 
 namespace BackEndSearchFakebook.Tests;
 
