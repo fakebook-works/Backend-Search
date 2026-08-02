@@ -20,7 +20,12 @@ public partial class FakebookMinhContext : DbContext
     public virtual DbSet<Token> Tokens { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-        => optionsBuilder.UseNpgsql("Name=ConnectionStrings:DefaultConnection");
+    {
+        if (!optionsBuilder.IsConfigured)
+        {
+            optionsBuilder.UseNpgsql("Name=ConnectionStrings:DefaultConnection");
+        }
+    }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -28,7 +33,7 @@ public partial class FakebookMinhContext : DbContext
         {
             entity.HasKey(e => e.Id).HasName("objects_pkey");
 
-            entity.ToTable("objects");
+            entity.ToTable("objects", "search");
 
             entity.Property(e => e.Id)
                 .ValueGeneratedNever()
@@ -45,7 +50,7 @@ public partial class FakebookMinhContext : DbContext
         {
             entity.HasKey(e => e.Id).HasName("tokens_pkey");
 
-            entity.ToTable("tokens");
+            entity.ToTable("tokens", "search");
 
             entity.HasIndex(e => e.TokenText, "tokens_token_text_key").IsUnique();
 
@@ -68,7 +73,7 @@ public partial class FakebookMinhContext : DbContext
                     j =>
                     {
                         j.HasKey("TokenId", "ObjectId").HasName("token_object_pkey");
-                        j.ToTable("token_object");
+                        j.ToTable("token_object", "search");
                         j.HasIndex(new[] { "ObjectId" }, "idx_token_object_obj_id");
                         j.IndexerProperty<long>("TokenId").HasColumnName("token_id");
                         j.IndexerProperty<long>("ObjectId").HasColumnName("object_id");

@@ -146,7 +146,7 @@ namespace BackEndSearchFakebook.Services
                 // key deliberately fails instead of associating an object with a wrong token.
                 await _context.Database.ExecuteSqlInterpolatedAsync(
                     $"""
-                    INSERT INTO tokens (id, token_text)
+                    INSERT INTO search.tokens (id, token_text)
                     VALUES ({tokenId}, {tokenText})
                     ON CONFLICT (token_text) DO NOTHING;
                     """,

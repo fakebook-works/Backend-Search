@@ -26,9 +26,16 @@ namespace BackEndSearchFakebook
                 "InternalSearchService:Secret",
                 InternalSearchServiceAuthenticationHandler.HeaderName);
 
+            var searchConnectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+            if (string.IsNullOrWhiteSpace(searchConnectionString))
+            {
+                throw new InvalidOperationException(
+                    "ConnectionStrings:DefaultConnection must be configured.");
+            }
+
             // Đăng ký kết nối Cơ sở dữ liệu PostgreSQL vào hệ thống
             builder.Services.AddDbContext<FakebookMinhContext>(options =>
-                options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+                options.UseNpgsql(searchConnectionString));
 
             // Đăng ký các Service xử lý Logic nghiệp vụ (Business Logic Layer)
             builder.Services.AddScoped<IndexerService>();       // Dịch vụ chuyên băm từ và ghi dữ liệu
@@ -102,7 +109,7 @@ namespace BackEndSearchFakebook
             builder.Services.AddScoped<TrustedGatewayUserAccessor>();
             if (builder.Configuration.GetValue("Database:ApplySchemaOnStartup", true))
             {
-                builder.Services.AddHostedService<SearchFeedbackSchemaHostedService>();
+                builder.Services.AddHostedService<SearchDatabaseMigrationHostedService>();
             }
 
             builder.Services

@@ -164,6 +164,9 @@ Các giá trị nhạy cảm trong `appsettings.json` được để trống có
 | .NET configuration key | Environment variable |
 |---|---|
 | `ConnectionStrings:DefaultConnection` | `ConnectionStrings__DefaultConnection` |
+| `ConnectionStrings:SearchMigrationDatabase` | `ConnectionStrings__SearchMigrationDatabase` |
+| `Database:ApplySchemaOnStartup` | `Database__ApplySchemaOnStartup` |
+| `Database:MigrationCommandTimeoutSeconds` | `Database__MigrationCommandTimeoutSeconds` |
 | `InternalSearchService:Secret` | `InternalSearchService__Secret` |
 | `Gateway:InternalSharedSecret` | `Gateway__InternalSharedSecret` |
 | `InternalServices:Messaging:BaseUrl` | `InternalServices__Messaging__BaseUrl` |
@@ -195,7 +198,24 @@ Credential từng xuất hiện trong file hoặc Git history phải được ro
 
 ## Database migration
 
-Không chạy migration legacy `20260711151522_InitialCreate`: migration này đã được chặn có chủ đích vì mapping type cũ sai và giả định bảng đã tồn tại. `BackEndSearch.sql` hiện là schema chuẩn cho fresh database. Trước khi tạo migration EF thay thế phải quyết định database hiện tại được rebuild/full replay từ SocialGraph hay cần migrate dữ liệu tại chỗ; giá trị legacy `post` không đủ thông tin để phân biệt FeedPost với GroupPost.
+Startup tự động bootstrap fresh PostgreSQL database từ authoritative
+`BackEndSearch.sql`. Runner giữ PostgreSQL advisory lock để nhiều replica không
+apply song song, ghi version/checksum vào `search.schema_migrations`, và fail startup
+nếu migration hay schema validation lỗi. File migration đã ghi ledger là immutable;
+thay đổi tiếp theo phải thêm file `<version>_<name>.sql` trong
+`Database/Migrations`.
+
+Nên cấp DDL role riêng qua `ConnectionStrings__SearchMigrationDatabase`; nếu để
+trống, runner fallback sang `DefaultConnection` để tương thích deployment cũ.
+`Database__MigrationCommandTimeoutSeconds` mặc định là 300 giây và chỉ
+nhận giá trị từ 1 đến 3600 giây.
+Chỉ đặt `Database__ApplySchemaOnStartup=false` khi release job riêng đã hoàn
+tất migrations trước khi service start.
+
+Migration EF legacy `20260711151522_InitialCreate` vẫn bị chặn và runner không
+gọi `Database.Migrate()`. Database legacy có `type` mapping sai sẽ fail validation;
+cần rebuild/full replay từ SocialGraph hoặc một migration dữ liệu được duyệt vì
+giá trị `post` cũ không phân biệt được FeedPost và GroupPost.
 
 ## Container Linux
 
