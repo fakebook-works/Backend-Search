@@ -6,6 +6,7 @@ namespace BackEndSearchFakebook.Helper
     // Hàm Tokenize: tách chuỗi các từ 
     public static class TextHelper 
     {
+        public const int MaximumTokenLength = 255;
         public static List<string> Tokenize (string text)
         {
             if (string.IsNullOrWhiteSpace(text))
@@ -70,9 +71,13 @@ namespace BackEndSearchFakebook.Helper
                 return;
             }
 
-            tokens.Add(token.ToString());
+            // PostgreSQL stores token_text in varchar(255). A valid long post may contain
+            // an uninterrupted identifier longer than that; cap its searchable projection
+            // instead of rejecting the entire canonical object and dead-lettering its outbox.
+            tokens.Add(token.Length <= MaximumTokenLength
+                ? token.ToString()
+                : token.ToString(0, MaximumTokenLength));
             token.Clear();
         }
     }
  }
-

@@ -12,7 +12,9 @@ public sealed record SearchIndexWritePayload(
 
 public static class SearchContractValidator
 {
-    public const int MaximumTextLength = 50_000;
+    // Must accommodate the SocialGraph post contract (63,206 characters); rejecting a
+    // valid post here would leave its canonical object without a searchable projection.
+    public const int MaximumTextLength = 63_206;
     public const int MaximumKeywordLength = 200;
     public const int MaximumPageSize = 100;
     public const int MaximumPageNumber = 1_000_000;
@@ -60,47 +62,31 @@ public static class SearchContractValidator
     public static bool IsValidLegacyType(short type) => type is >= 0 and <= 4;
 
     public static bool TryValidateText(string? text, out string message)
+        => TryNormalizeText(text, out _, out message);
+
+    public static bool TryNormalizeText(string? text, out string normalized, out string message)
     {
-        if (string.IsNullOrWhiteSpace(text))
+        if (!InputTextSecurity.TryNormalize(text, MaximumTextLength, out normalized, out message))
         {
-            message = "text must contain at least one non-whitespace character.";
             return false;
         }
-
-        if (text.Length > MaximumTextLength)
-        {
-            message = $"text must not exceed {MaximumTextLength} characters.";
-            return false;
-        }
-
-        var tokens = TextHelper.Tokenize(text);
-        if (tokens.Any(token => token.Length > 255))
-        {
-            message = "text contains a token longer than 255 characters.";
-            return false;
-        }
-
 
         message = string.Empty;
         return true;
     }
 
     public static bool TryValidateKeyword(string? keyword, out string message)
+        => TryNormalizeKeyword(keyword, out _, out message);
+
+    public static bool TryNormalizeKeyword(string? keyword, out string normalized, out string message)
     {
-        if (string.IsNullOrWhiteSpace(keyword))
+        if (!InputTextSecurity.TryNormalize(keyword, MaximumKeywordLength, out normalized, out message))
         {
-            message = "keyword must contain at least one non-whitespace character.";
-            return false;
-        }
-
-        if (keyword.Length > MaximumKeywordLength)
-        {
-            message = $"keyword must not exceed {MaximumKeywordLength} characters.";
             return false;
         }
 
 
-        if (TextHelper.Tokenize(keyword).Distinct(StringComparer.Ordinal).Count() > MaximumQueryTokens)
+        if (TextHelper.Tokenize(normalized).Distinct(StringComparer.Ordinal).Count() > MaximumQueryTokens)
         {
             message = $"keyword must not contain more than {MaximumQueryTokens} distinct terms.";
             return false;

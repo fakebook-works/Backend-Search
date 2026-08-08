@@ -76,6 +76,30 @@ public sealed class SearchContractValidatorTests
         Assert.True(SearchContractValidator.TryValidateText(manyIndexedTerms, out var indexMessage), indexMessage);
     }
 
+    [Fact]
+    public void Validation_rejects_zalgo_and_control_text_before_tokenization()
+    {
+        Assert.False(SearchContractValidator.TryValidateText("A" + new string('\u0301', 20), out _));
+        Assert.False(SearchContractValidator.TryValidateKeyword("safe\u202Equery", out _));
+        Assert.True(SearchContractValidator.TryValidateText(new string('x', SearchContractValidator.MaximumTextLength), out var message), message);
+    }
+
+    [Fact]
+    public void Normalization_returns_the_exact_canonical_value_used_downstream()
+    {
+        Assert.True(SearchContractValidator.TryNormalizeText(
+            "Ａ\r\npost",
+            out var text,
+            out var textMessage), textMessage);
+        Assert.Equal("A\npost", text);
+
+        Assert.True(SearchContractValidator.TryNormalizeKeyword(
+            "ｆａｋｅｂｏｏｋ",
+            out var keyword,
+            out var keywordMessage), keywordMessage);
+        Assert.Equal("fakebook", keyword);
+    }
+
     [Theory]
     [InlineData(1, 1, true)]
     [InlineData(1, SearchContractValidator.MaximumPageSize, true)]

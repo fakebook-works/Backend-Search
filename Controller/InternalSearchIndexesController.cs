@@ -45,19 +45,22 @@ public sealed class InternalSearchIndexesController(
                 "INVALID_OBJECT_TYPE");
         }
 
-        if (!SearchContractValidator.TryValidateText(request.Text, out var validationMessage))
+        if (!SearchContractValidator.TryNormalizeText(
+                request.Text,
+                out var normalizedText,
+                out var validationMessage))
         {
             return SearchProblems.Result(
                 this,
                 StatusCodes.Status400BadRequest,
                 validationMessage,
                 "INVALID_TEXT");
-        }
+            }
 
         var created = await indexerService.UpsertObjectAsync(
             id,
             type,
-            request.Text!,
+            normalizedText,
             cancellationToken);
         var payload = new SearchIndexWritePayload(true, id, canonicalObjectType, created);
 

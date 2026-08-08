@@ -13,9 +13,9 @@ public sealed class Query
         [Service] SearchService searchService,
         CancellationToken cancellationToken)
     {
-        ValidateKeyword(keyword);
+        var normalizedKeyword = NormalizeKeyword(keyword);
 
-        var candidates = await searchService.FastSearchAsync(keyword, cancellationToken);
+        var candidates = await searchService.FastSearchAsync(normalizedKeyword, cancellationToken);
         return candidates
             .Select<SearchCandidate, IFastSearchResult?>(candidate => candidate.ObjectType switch
             {
@@ -35,9 +35,9 @@ public sealed class Query
         int pageSize = 20,
         CancellationToken cancellationToken = default)
     {
-        ValidateSearchArguments(keyword, pageNumber, pageSize);
+        var normalizedKeyword = NormalizeSearchArguments(keyword, pageNumber, pageSize);
         var page = await searchService.SearchByTypeAsync(
-            keyword,
+            normalizedKeyword,
             SearchObjectType.User,
             pageNumber,
             pageSize,
@@ -58,7 +58,7 @@ public sealed class Query
         int pageSize = 20,
         CancellationToken cancellationToken = default)
     {
-        ValidateSearchArguments(keyword, pageNumber, pageSize);
+        var normalizedKeyword = NormalizeSearchArguments(keyword, pageNumber, pageSize);
         if (!trustedUser.TryGetUserId(out var viewerId))
         {
             throw SearchGraphQlErrors.Unauthenticated();
@@ -75,7 +75,7 @@ public sealed class Query
         }
 
         var page = await searchService.SearchUsersWithinIdsAsync(
-            keyword,
+            normalizedKeyword,
             contactIds,
             pageNumber,
             pageSize,
@@ -95,7 +95,7 @@ public sealed class Query
         int pageSize = 20,
         CancellationToken cancellationToken = default)
     {
-        ValidateSearchArguments(keyword, pageNumber, pageSize);
+        var normalizedKeyword = NormalizeSearchArguments(keyword, pageNumber, pageSize);
         if (!trustedUser.TryGetUserId(out var viewerId))
         {
             throw SearchGraphQlErrors.Unauthenticated();
@@ -112,7 +112,7 @@ public sealed class Query
         }
 
         var page = await searchService.SearchUsersWithinIdsAsync(
-            keyword,
+            normalizedKeyword,
             friendIds,
             pageNumber,
             pageSize,
@@ -133,7 +133,7 @@ public sealed class Query
         int pageSize = 20,
         CancellationToken cancellationToken = default)
     {
-        ValidateSearchArguments(keyword, pageNumber, pageSize);
+        var normalizedKeyword = NormalizeSearchArguments(keyword, pageNumber, pageSize);
         if (!trustedUser.TryGetUserId(out var viewerId))
         {
             throw SearchGraphQlErrors.Unauthenticated();
@@ -153,7 +153,7 @@ public sealed class Query
         }
 
         var page = await searchService.SearchUsersWithinIdsAsync(
-            keyword,
+            normalizedKeyword,
             connectionIds,
             pageNumber,
             pageSize,
@@ -171,9 +171,9 @@ public sealed class Query
         int pageSize = 20,
         CancellationToken cancellationToken = default)
     {
-        ValidateSearchArguments(keyword, pageNumber, pageSize);
+        var normalizedKeyword = NormalizeSearchArguments(keyword, pageNumber, pageSize);
         var page = await searchService.SearchByTypeAsync(
-            keyword,
+            normalizedKeyword,
             SearchObjectType.Group,
             pageNumber,
             pageSize,
@@ -192,9 +192,9 @@ public sealed class Query
         int pageSize = 20,
         CancellationToken cancellationToken = default)
     {
-        ValidateSearchArguments(keyword, pageNumber, pageSize);
+        var normalizedKeyword = NormalizeSearchArguments(keyword, pageNumber, pageSize);
         var page = await searchService.SearchByTypeAsync(
-            keyword,
+            normalizedKeyword,
             SearchObjectType.FeedPost,
             pageNumber,
             pageSize,
@@ -213,9 +213,9 @@ public sealed class Query
         int pageSize = 20,
         CancellationToken cancellationToken = default)
     {
-        ValidateSearchArguments(keyword, pageNumber, pageSize);
+        var normalizedKeyword = NormalizeSearchArguments(keyword, pageNumber, pageSize);
         var page = await searchService.SearchByTypeAsync(
-            keyword,
+            normalizedKeyword,
             SearchObjectType.GroupPost,
             pageNumber,
             pageSize,
@@ -234,9 +234,9 @@ public sealed class Query
         int pageSize = 20,
         CancellationToken cancellationToken = default)
     {
-        ValidateSearchArguments(keyword, pageNumber, pageSize);
+        var normalizedKeyword = NormalizeSearchArguments(keyword, pageNumber, pageSize);
         var page = await searchService.SearchByTypeAsync(
-            keyword,
+            normalizedKeyword,
             SearchObjectType.Reel,
             pageNumber,
             pageSize,
@@ -247,12 +247,12 @@ public sealed class Query
             SearchPageMapper.PageInfo(page));
     }
 
-    private static void ValidateSearchArguments(
+    private static string NormalizeSearchArguments(
         string keyword,
         int pageNumber,
         int pageSize)
     {
-        ValidateKeyword(keyword);
+        var normalizedKeyword = NormalizeKeyword(keyword);
         if (!SearchContractValidator.TryValidatePaging(
                 pageNumber,
                 pageSize,
@@ -260,13 +260,17 @@ public sealed class Query
         {
             throw SearchGraphQlErrors.InvalidInput(message);
         }
+
+        return normalizedKeyword;
     }
 
-    private static void ValidateKeyword(string keyword)
+    private static string NormalizeKeyword(string keyword)
     {
-        if (!SearchContractValidator.TryValidateKeyword(keyword, out var message))
+        if (!SearchContractValidator.TryNormalizeKeyword(keyword, out var normalized, out var message))
         {
             throw SearchGraphQlErrors.InvalidInput(message);
         }
+
+        return normalized;
     }
 }
